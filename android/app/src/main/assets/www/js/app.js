@@ -5559,6 +5559,30 @@ class SudokuApp {
 
     // Lấy ma trận hạt nhân chuẩn từ kho 712 đề dựa trên mã Seed và Cấp độ
     const bank = (typeof window !== 'undefined' && window.SUDOKU_PUZZLE_BANK) ? window.SUDOKU_PUZZLE_BANK : null;
+    const cleanSeed = str.toUpperCase();
+    let exactMatch = null;
+    if (bank) {
+      if (bank[difficulty]) {
+        exactMatch = bank[difficulty].find(p => String(p.id).toUpperCase() === cleanSeed);
+      }
+      if (!exactMatch && bank.nightmare) {
+        exactMatch = bank.nightmare.find(p => String(p.id).toUpperCase() === cleanSeed);
+      }
+      if (!exactMatch && bank.extreme) {
+        exactMatch = bank.extreme.find(p => String(p.id).toUpperCase() === cleanSeed);
+      }
+    }
+
+    if (exactMatch) {
+      const g = [];
+      const sl = [];
+      for (let r = 0; r < 9; r++) {
+        g.push(exactMatch.mission.slice(r * 9, (r + 1) * 9).split('').map(Number));
+        sl.push(exactMatch.solution.slice(r * 9, (r + 1) * 9).split('').map(Number));
+      }
+      return { grid: g, sol: sl, exactMatch: true, win_rate: exactMatch.win_rate, id: exactMatch.id };
+    }
+
     let base = null;
     if (bank && bank[difficulty] && bank[difficulty].length > 0) {
       const idx = Math.abs(s) % bank[difficulty].length;

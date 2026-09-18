@@ -3005,4 +3005,85 @@ button, .sudoku-cell, .sample-preset-card {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ==========================================================================
+   Normal Game Timer HUD & Custom Puzzle Modal Styles
+   ========================================================================== */
+
+.normal-timer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #38bdf8;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.normal-timer-badge:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+  transform: scale(1.03);
+}
+
+.normal-timer-badge.timer-warning {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  animation: pulseTimerWarning 1.2s infinite ease-in-out;
+}
+
+.normal-timer-badge.timer-danger {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  color: #f87171;
+  animation: pulseTimerDanger 0.8s infinite ease-in-out;
+}
+
+@keyframes pulseTimerWarning {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.04); opacity: 0.85; }
+}
+
+@keyframes pulseTimerDanger {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
+  50% { transform: scale(1.06); box-shadow: 0 0 12px rgba(239, 68, 68, 0.5); }
+}
+
+.btn-custom-puzzle-glow {
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.35);
+  transition: all 0.25s ease;
+}
+
+.btn-custom-puzzle-glow:hover {
+  box-shadow: 0 0 18px rgba(2, 132, 199, 0.65);
+  transform: translateY(-1px);
+}
+
+.custom-diff-pills .btn-custom-diff.active {
+  background: linear-gradient(135deg, #0284c7, #2563eb) !important;
+  color: #ffffff !important;
+  border-color: rgba(147, 197, 253, 0.5) !important;
+  font-weight: 700 !important;
+}
+
+.btn-custom-timer-choice.active {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #ffffff !important;
+  border-color: rgba(167, 243, 208, 0.5) !important;
+  font-weight: 700 !important;
+}
+
+.btn-normal-timer-quick.active {
+  background: rgba(56, 189, 248, 0.25) !important;
+  color: #38bdf8 !important;
+  border-color: #38bdf8 !important;
+  font-weight: 700 !important;
+}
+
 

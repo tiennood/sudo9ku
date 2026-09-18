@@ -81,6 +81,15 @@ class SudokuApp {
     // Cài đặt Tiến trình bước giải & Sổ tay hướng dẫn (Xem trước tương lai hay Chỉ xem lại quá khứ)
     this.allowForwardSteps = localStorage.getItem('sudoku_allow_forward_steps') !== 'false';
 
+    // Cài đặt Đồng hồ thời gian ván chơi bình thường (Timer)
+    this.normalTimerMode = localStorage.getItem('sudoku_timer_mode') || 'countup'; // 'countup' | 'countdown' | 'none'
+    this.normalCountdownMinutes = parseInt(localStorage.getItem('sudoku_timer_countdown_mins') || '10', 10);
+    this.normalTimerElapsedSeconds = 0;
+    this.normalTimerRemainingSeconds = this.normalCountdownMinutes * 60;
+    this.normalTimerInterval = null;
+    this.activeCustomSeed = null;
+    this.activeCustomDifficulty = 'medium';
+
     this.diagramViewer = new FormulaDiagramViewer();
 
     this.initDOM();
@@ -92,9 +101,10 @@ class SudokuApp {
     this.updatePencilUI();
     this.updateCrosshatchBtnLabel();
     this.updateSolutionPreviewLockUI();
+    this.updateNormalTimerDisplay();
 
-    // Tự động nạp ảnh mẫu ban đầu
-    this.loadSampleImage();
+    // Tự động kiểm tra tham số URL (đề chơi chung) hoặc nạp ảnh mẫu ban đầu
+    this.checkInitialUrlParams();
   }
 
   initDOM() {
@@ -273,7 +283,24 @@ class SudokuApp {
       settingsTabBtns: document.querySelectorAll('.settings-tab-btn'),
       settingsTabPanes: document.querySelectorAll('.settings-tab-pane'),
       toggleAllowForwardSteps: document.getElementById('toggle-allow-forward-steps'),
-      forwardStepsStatusBadge: document.getElementById('forward-steps-status-badge')
+      forwardStepsStatusBadge: document.getElementById('forward-steps-status-badge'),
+
+      // Normal Timer & Custom Puzzle
+      normalTimerBadge: document.getElementById('normal-timer-badge'),
+      normalTimerIcon: document.getElementById('normal-timer-icon'),
+      normalTimerText: document.getElementById('normal-timer-text'),
+      normalTimerCountdownConfig: document.getElementById('normal-timer-countdown-config'),
+      normalTimerCustomMinutes: document.getElementById('normal-timer-custom-minutes'),
+      btnOpenCustomPuzzle: document.getElementById('btn-open-custom-puzzle'),
+      customPuzzleModal: document.getElementById('custom-puzzle-modal'),
+      btnCloseCustomPuzzle: document.getElementById('btn-close-custom-puzzle'),
+      btnCancelCustomPuzzle: document.getElementById('btn-cancel-custom-puzzle'),
+      btnCustomSeedRandom: document.getElementById('btn-custom-seed-random'),
+      customPuzzleSeedInput: document.getElementById('custom-puzzle-seed-input'),
+      btnCopyCustomLink: document.getElementById('btn-copy-custom-link'),
+      customShareUrlBox: document.getElementById('custom-share-url-box'),
+      customLinkCopiedToast: document.getElementById('custom-link-copied-toast'),
+      btnStartCustomPuzzle: document.getElementById('btn-start-custom-puzzle')
     };
   }
 
@@ -766,6 +793,87 @@ class SudokuApp {
     if (this.dom.toggleAllowForwardSteps) {
       this.dom.toggleAllowForwardSteps.addEventListener('change', (e) => {
         this.updateForwardStepsBadge(e.target.checked);
+      });
+    }
+
+    // Normal Timer Event Listeners
+    if (this.dom.normalTimerBadge) {
+      this.dom.normalTimerBadge.addEventListener('click', () => {
+        this.openUnifiedSettingsModal('timer');
+      });
+    }
+    const normalTimerRadios = document.querySelectorAll('input[name="normal-timer-mode"]');
+    normalTimerRadios.forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        this.updateTimerModeVisuals(e.target.value);
+      });
+    });
+    const normalTimerQuickBtns = document.querySelectorAll('.btn-normal-timer-quick');
+    normalTimerQuickBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        normalTimerQuickBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if (this.dom.normalTimerCustomMinutes) {
+          this.dom.normalTimerCustomMinutes.value = btn.dataset.mins;
+        }
+      });
+    });
+
+    // Custom Puzzle & Seed Sharing Modal Listeners
+    if (this.dom.btnOpenCustomPuzzle) {
+      this.dom.btnOpenCustomPuzzle.addEventListener('click', () => {
+        this.openCustomPuzzleModal();
+      });
+    }
+    if (this.dom.btnCloseCustomPuzzle) {
+      this.dom.btnCloseCustomPuzzle.addEventListener('click', () => {
+        this.closeCustomPuzzleModal();
+      });
+    }
+    if (this.dom.btnCancelCustomPuzzle) {
+      this.dom.btnCancelCustomPuzzle.addEventListener('click', () => {
+        this.closeCustomPuzzleModal();
+      });
+    }
+    if (this.dom.customPuzzleModal) {
+      this.dom.customPuzzleModal.addEventListener('click', (e) => {
+        if (e.target === this.dom.customPuzzleModal) this.closeCustomPuzzleModal();
+      });
+    }
+    if (this.dom.btnCustomSeedRandom) {
+      this.dom.btnCustomSeedRandom.addEventListener('click', () => {
+        this.randomizeCustomSeed();
+      });
+    }
+    if (this.dom.customPuzzleSeedInput) {
+      this.dom.customPuzzleSeedInput.addEventListener('input', () => {
+        this.updateCustomPuzzleShareLink();
+      });
+    }
+    const customDiffBtns = document.querySelectorAll('.btn-custom-diff');
+    customDiffBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        customDiffBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.updateCustomPuzzleShareLink();
+      });
+    });
+    const customTimerChoiceBtns = document.querySelectorAll('.btn-custom-timer-choice');
+    customTimerChoiceBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        customTimerChoiceBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.updateCustomPuzzleShareLink();
+      });
+    });
+    if (this.dom.btnCopyCustomLink) {
+      this.dom.btnCopyCustomLink.addEventListener('click', () => {
+        this.copyCustomPuzzleShareLink();
+      });
+    }
+    if (this.dom.btnStartCustomPuzzle) {
+      this.dom.btnStartCustomPuzzle.addEventListener('click', () => {
+        this.startCustomPuzzleFromModal();
       });
     }
 
@@ -3752,11 +3860,14 @@ class SudokuApp {
         this.setStatus(`✅ ĐÚNG: Số ${val} tại (Hàng ${row + 1}, Cột ${col + 1}) chính xác theo nghiệm chuẩn!`, 'valid');
 
         if (this.isBoardComplete()) {
-          this.setStatus('🎉 Chúc mừng! Bạn đã hoàn thành câu đố chuẩn xác 100%!', 'solved');
+          this.stopNormalTimer();
+          const finishTime = this.dom.normalTimerText ? this.dom.normalTimerText.textContent : '00:00';
+          this.setStatus(`🎉 Chúc mừng! Bạn đã hoàn thành câu đố chuẩn xác 100% trong ${finishTime}!`, 'solved');
           this.playSound('complete');
           if (this.currentGameRecord) {
             this.currentGameRecord.status = 'completed';
             this.currentGameRecord.mistakes = this.mistakesCount;
+            this.currentGameRecord.duration = finishTime;
             this.saveRecentGames();
           }
         }
@@ -4255,6 +4366,9 @@ class SudokuApp {
       this.recentGames = this.recentGames.slice(0, 30);
     }
     this.saveRecentGames();
+
+    // Khởi động đồng hồ thời gian ván chơi bình thường
+    this.startNormalTimer();
   }
 
   countCurrentClues() {
@@ -4724,10 +4838,24 @@ class SudokuApp {
       this.updateForwardStepsBadge(this.allowForwardSteps);
     }
 
-    // 5. Chuyển sang Tab được yêu cầu
+    // 5. Đồng bộ cài đặt Thời gian (Timer)
+    const timerRadio = document.querySelector(`input[name="normal-timer-mode"][value="${this.normalTimerMode}"]`);
+    if (timerRadio) {
+      timerRadio.checked = true;
+      this.updateTimerModeVisuals(this.normalTimerMode);
+    }
+    if (this.dom.normalTimerCustomMinutes) {
+      this.dom.normalTimerCustomMinutes.value = this.normalCountdownMinutes;
+    }
+    const quickTimerBtns = document.querySelectorAll('.btn-normal-timer-quick');
+    quickTimerBtns.forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.mins, 10) === this.normalCountdownMinutes);
+    });
+
+    // 6. Chuyển sang Tab được yêu cầu
     this.switchSettingsTab(defaultTab);
 
-    // 5. Hiển thị modal chính và đồng bộ active lên các shell compatibility
+    // Hiển thị modal chính và đồng bộ active lên các shell compatibility
     if (this.dom.unifiedSettingsModal) {
       this.dom.unifiedSettingsModal.classList.add('active');
     }
@@ -4845,6 +4973,19 @@ class SudokuApp {
         }
       }
     }
+
+    // 5. Lưu Cài đặt Thời gian (Timer)
+    const checkedTimerRadio = document.querySelector('input[name="normal-timer-mode"]:checked');
+    if (checkedTimerRadio) {
+      this.normalTimerMode = checkedTimerRadio.value;
+      localStorage.setItem('sudoku_timer_mode', this.normalTimerMode);
+    }
+    if (this.dom.normalTimerCustomMinutes) {
+      const mins = parseInt(this.dom.normalTimerCustomMinutes.value, 10) || 10;
+      this.normalCountdownMinutes = Math.max(1, Math.min(180, mins));
+      localStorage.setItem('sudoku_timer_countdown_mins', String(this.normalCountdownMinutes));
+    }
+    this.applyNormalTimerSettings();
 
     this.updateCrosshatchBtnLabel();
     this.updatePencilUI();
@@ -5064,6 +5205,373 @@ class SudokuApp {
     this.updateInspector();
     this.playSound('correct');
     this.setStatus('✓ Đã cập nhật cài đặt tia gióng ngang dọc & màu sắc!', 'valid');
+  }
+
+  // ==========================================
+  // NORMAL GAME TIMER SYSTEM
+  // ==========================================
+  startNormalTimer() {
+    this.stopNormalTimer();
+    if (this.arenaManager && this.arenaManager.isActive) {
+      if (this.dom.normalTimerBadge) this.dom.normalTimerBadge.style.display = 'none';
+      return;
+    }
+    if (this.normalTimerMode === 'none') {
+      if (this.dom.normalTimerBadge) this.dom.normalTimerBadge.style.display = 'none';
+      return;
+    }
+
+    if (this.dom.normalTimerBadge) this.dom.normalTimerBadge.style.display = 'inline-flex';
+    this.normalTimerElapsedSeconds = 0;
+    this.normalTimerRemainingSeconds = this.normalCountdownMinutes * 60;
+    this.updateNormalTimerDisplay();
+
+    this.normalTimerInterval = setInterval(() => {
+      if (this.normalTimerMode === 'countup') {
+        this.normalTimerElapsedSeconds++;
+        this.updateNormalTimerDisplay();
+      } else if (this.normalTimerMode === 'countdown') {
+        this.normalTimerRemainingSeconds--;
+        this.updateNormalTimerDisplay();
+        if (this.normalTimerRemainingSeconds <= 0) {
+          this.onNormalTimerExpire();
+        }
+      }
+    }, 1000);
+  }
+
+  stopNormalTimer() {
+    if (this.normalTimerInterval) {
+      clearInterval(this.normalTimerInterval);
+      this.normalTimerInterval = null;
+    }
+  }
+
+  updateNormalTimerDisplay() {
+    if (!this.dom.normalTimerText) return;
+    if (this.normalTimerMode === 'none' || (this.arenaManager && this.arenaManager.isActive)) {
+      if (this.dom.normalTimerBadge) this.dom.normalTimerBadge.style.display = 'none';
+      return;
+    }
+    if (this.dom.normalTimerBadge) this.dom.normalTimerBadge.style.display = 'inline-flex';
+
+    let totalSecs = 0;
+    if (this.normalTimerMode === 'countup') {
+      totalSecs = this.normalTimerElapsedSeconds;
+      if (this.dom.normalTimerIcon) this.dom.normalTimerIcon.textContent = '⏱️';
+      if (this.dom.normalTimerBadge) this.dom.normalTimerBadge.classList.remove('timer-warning', 'timer-danger');
+    } else {
+      totalSecs = Math.max(0, this.normalTimerRemainingSeconds);
+      if (this.dom.normalTimerIcon) this.dom.normalTimerIcon.textContent = '⏳';
+      if (this.dom.normalTimerBadge) {
+        if (totalSecs <= 30 && totalSecs > 0) {
+          this.dom.normalTimerBadge.classList.add('timer-danger');
+          this.dom.normalTimerBadge.classList.remove('timer-warning');
+        } else if (totalSecs <= 60 && totalSecs > 0) {
+          this.dom.normalTimerBadge.classList.add('timer-warning');
+          this.dom.normalTimerBadge.classList.remove('timer-danger');
+        } else {
+          this.dom.normalTimerBadge.classList.remove('timer-warning', 'timer-danger');
+        }
+      }
+    }
+
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    this.dom.normalTimerText.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  onNormalTimerExpire() {
+    this.stopNormalTimer();
+    this.playSound('conflict');
+    if (this.dom.normalTimerBadge) {
+      this.dom.normalTimerBadge.classList.add('timer-danger');
+    }
+    this.setStatus('⌛ HẾT GIỜ! Bạn đã dùng hết thời gian thử thách!', 'conflict');
+    setTimeout(() => {
+      const cont = window.confirm('⌛ Đã hết thời gian quy định cho ván cờ này!\n\nBạn có muốn tiếp tục chơi không giới hạn thời gian không?');
+      if (cont) {
+        this.normalTimerMode = 'countup';
+        this.startNormalTimer();
+        this.setStatus('▶️ Tiếp tục chơi ván cờ với đồng hồ đếm xuôi!', 'valid');
+      }
+    }, 200);
+  }
+
+  updateTimerModeVisuals(selectedMode) {
+    const radioLabels = {
+      countup: document.getElementById('label-timer-mode-countup'),
+      countdown: document.getElementById('label-timer-mode-countdown'),
+      none: document.getElementById('label-timer-mode-none')
+    };
+    Object.keys(radioLabels).forEach(mode => {
+      const lbl = radioLabels[mode];
+      if (lbl) {
+        if (mode === selectedMode) {
+          lbl.style.background = 'rgba(56, 189, 248, 0.12)';
+          lbl.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        } else {
+          lbl.style.background = 'rgba(255,255,255,0.03)';
+          lbl.style.borderColor = 'var(--card-border)';
+        }
+      }
+    });
+
+    if (this.dom.normalTimerCountdownConfig) {
+      this.dom.normalTimerCountdownConfig.style.display = (selectedMode === 'countdown') ? 'block' : 'none';
+    }
+  }
+
+  applyNormalTimerSettings() {
+    this.stopNormalTimer();
+    this.startNormalTimer();
+  }
+
+  // ==========================================
+  // CUSTOM PUZZLE & SEED SHARING (NORMAL MODE)
+  // ==========================================
+  checkInitialUrlParams() {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const seedParam = urlParams.get('seed') || urlParams.get('m');
+      const diffParam = urlParams.get('diff') || urlParams.get('level');
+      const timerParam = urlParams.get('timer');
+      if (seedParam) {
+        this.loadPuzzleBySeed(seedParam, diffParam || 'medium', timerParam);
+        return;
+      }
+    } catch (e) {
+      console.warn('Không thể đọc tham số URL:', e);
+    }
+    this.loadSampleImage();
+  }
+
+  openCustomPuzzleModal() {
+    if (this.arenaManager && this.arenaManager.isActive) {
+      this.arenaManager.showTemporaryToast('⚠️ Hãy hoàn thành hoặc thoát Đấu Trường để tạo đề chơi chung!');
+      return;
+    }
+    if (this.dom.customPuzzleSeedInput && !this.dom.customPuzzleSeedInput.value.trim()) {
+      this.randomizeCustomSeed();
+    }
+    this.updateCustomPuzzleShareLink();
+    if (this.dom.customPuzzleModal) {
+      this.dom.customPuzzleModal.classList.add('active');
+    }
+  }
+
+  closeCustomPuzzleModal() {
+    if (this.dom.customPuzzleModal) {
+      this.dom.customPuzzleModal.classList.remove('active');
+    }
+  }
+
+  randomizeCustomSeed() {
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    if (this.dom.customPuzzleSeedInput) {
+      this.dom.customPuzzleSeedInput.value = String(randomNum);
+    }
+    this.updateCustomPuzzleShareLink();
+  }
+
+  getSelectedCustomDifficulty() {
+    const activeBtn = document.querySelector('.btn-custom-diff.active');
+    return activeBtn ? activeBtn.dataset.diff : 'medium';
+  }
+
+  getSelectedCustomTimerConfig() {
+    const activeBtn = document.querySelector('.btn-custom-timer-choice.active');
+    if (!activeBtn) return { mode: 'countup', mins: 0 };
+    return {
+      mode: activeBtn.dataset.mode,
+      mins: parseInt(activeBtn.dataset.mins, 10) || 0
+    };
+  }
+
+  updateCustomPuzzleShareLink() {
+    if (!this.dom.customShareUrlBox) return;
+    const seed = (this.dom.customPuzzleSeedInput?.value.trim() || '2026').toUpperCase();
+    const diff = this.getSelectedCustomDifficulty();
+    const timerCfg = this.getSelectedCustomTimerConfig();
+
+    const baseUrl = window.location.origin + window.location.pathname;
+    const shareUrl = `${baseUrl}?seed=${encodeURIComponent(seed)}&diff=${diff}&timer=${timerCfg.mins}`;
+    this.dom.customShareUrlBox.textContent = shareUrl;
+    if (this.dom.customLinkCopiedToast) {
+      this.dom.customLinkCopiedToast.style.display = 'none';
+    }
+  }
+
+  copyCustomPuzzleShareLink() {
+    const text = this.dom.customShareUrlBox?.textContent || '';
+    if (!text) return;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        if (this.dom.customLinkCopiedToast) {
+          this.dom.customLinkCopiedToast.style.display = 'block';
+        }
+      }).catch(() => this.fallbackCopy(text));
+    } else {
+      this.fallbackCopy(text);
+    }
+  }
+
+  fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      if (this.dom.customLinkCopiedToast) {
+        this.dom.customLinkCopiedToast.style.display = 'block';
+      }
+    } catch (err) {
+      alert('Link chơi chung: ' + text);
+    }
+    document.body.removeChild(ta);
+  }
+
+  startCustomPuzzleFromModal() {
+    const seed = (this.dom.customPuzzleSeedInput?.value.trim() || '2026').toUpperCase();
+    const diff = this.getSelectedCustomDifficulty();
+    const timerCfg = this.getSelectedCustomTimerConfig();
+
+    this.closeCustomPuzzleModal();
+    this.loadPuzzleBySeed(seed, diff, timerCfg.mins, timerCfg.mode);
+  }
+
+  loadPuzzleBySeed(seedStr, difficulty = 'medium', timerMinutes = null, timerMode = null) {
+    const seed = String(seedStr).trim().toUpperCase();
+    const diff = String(difficulty || 'medium').toLowerCase();
+
+    // Sinh ma trận câu đố và nghiệm chuẩn dựa trên Seed
+    const puzzle = this.generatePuzzleFromSeed(seed, diff);
+    if (!puzzle || !puzzle.grid || !puzzle.sol) {
+      this.setStatus('Lỗi tạo đề từ mã đề ' + seed, 'conflict');
+      return;
+    }
+
+    // Cập nhật timer nếu có chỉ định
+    if (timerMinutes !== null && timerMinutes !== undefined) {
+      const mins = parseInt(timerMinutes, 10);
+      if (mins > 0) {
+        this.normalTimerMode = 'countdown';
+        this.normalCountdownMinutes = mins;
+      } else {
+        this.normalTimerMode = (timerMode === 'none') ? 'none' : 'countup';
+      }
+    }
+
+    // Nạp bàn cờ
+    this.initialBoard = SudokuSolver.cloneBoard(puzzle.grid);
+    this.currentBoard = SudokuSolver.cloneBoard(puzzle.grid);
+    this.originalPuzzleGrid = SudokuSolver.cloneBoard(puzzle.grid);
+    this.solution = SudokuSolver.cloneBoard(puzzle.sol);
+
+    this.isOriginalClue = Array.from({ length: 9 }, (_, r) =>
+      Array.from({ length: 9 }, (_, c) => puzzle.grid[r][c] !== 0)
+    );
+    this.manualCandidates = Array.from({ length: 9 }, () => Array(9).fill(null).map(() => []));
+    this.userMovesHistory = [];
+    this.mistakesCount = 0;
+    this.updateMistakeBadge();
+
+    const diffNames = {
+      easy: '🟢 Dễ',
+      medium: '🟡 Vừa',
+      hard: '🟠 Khó',
+      extreme: '🔴 Cực khó',
+      nightmare: '💀 Ác mộng 17 ô'
+    };
+    const diffName = diffNames[diff] || diff;
+
+    this.activeCustomSeed = seed;
+    this.activeCustomDifficulty = diff;
+
+    this.startNewGameRecord(`Đề #${seed} (${diffName})`);
+    this.renderBoard();
+    this.updateInspector();
+    this.syncSolvingWalkthroughWithCurrentBoard();
+    this.updateSolutionPreviewLockUI();
+
+    this.playSound('step');
+    this.setStatus(`🎮 Đã nạp Đề #${seed} • Cấp độ: ${diffName}! Hãy cùng so tài nào!`, 'valid');
+  }
+
+  generatePuzzleFromSeed(seedStr, difficulty = 'medium') {
+    const basePuzzles = {
+      easy: {
+        m: '900508007080302905054000080070680032100004008500219060000906001726001040001470056',
+        s: '913568427687342915254197683479685132162734598538219764345926871726851349891473256'
+      },
+      medium: {
+        m: '203400005809160704006030019702003060008250000001607002007005926930720000600090470',
+        s: '213479685859162734476538219742913568368254197591687342187345926934726851625891473'
+      },
+      hard: {
+        m: '100034008070680030008210704054090680910508020080300005305906871006000040001070200',
+        s: '162734598479685132538219764254197683913568427687342915345926871726851349891473256'
+      },
+      extreme: {
+        m: '300049000000600501752001000001000700500396000008150096003010060004000100000028000',
+        s: '316549827489672531752831649691284753547396218238157496873415962924763185165928374'
+      },
+      nightmare: {
+        m: '800000000003600000070090200050007000000045700000100030001000068008500010090000400',
+        s: '812753649943682175675491283154237896369845721287169534521974368438526917796318452'
+      }
+    };
+
+    const base = basePuzzles[difficulty] || basePuzzles.medium;
+    let s = 0;
+    const str = String(seedStr).trim();
+    for (let i = 0; i < str.length; i++) {
+      s = ((s << 5) - s) + str.charCodeAt(i);
+      s |= 0;
+    }
+    s = (Math.abs(s) || 1367) % 2147483647;
+    const rnd = () => {
+      s = (s * 16807) % 2147483647;
+      return (s - 1) / 2147483646;
+    };
+
+    let grid = [];
+    let sol = [];
+    for (let r = 0; r < 9; r++) {
+      grid.push(base.m.slice(r * 9, (r + 1) * 9).split('').map(Number));
+      sol.push(base.s.slice(r * 9, (r + 1) * 9).split('').map(Number));
+    }
+
+    // 1. Permute digits
+    const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+    for (let i = digits.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      [digits[i], digits[j]] = [digits[j], digits[i]];
+    }
+    const digitMap = { 0: 0 };
+    for (let i = 0; i < 9; i++) digitMap[i + 1] = digits[i];
+
+    grid = grid.map(row => row.map(v => digitMap[v]));
+    sol = sol.map(row => row.map(v => digitMap[v]));
+
+    // 2. Permute rows within bands
+    for (let b = 0; b < 3; b++) {
+      const rows = [b * 3, b * 3 + 1, b * 3 + 2];
+      for (let i = 2; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [rows[i], rows[j]] = [rows[j], rows[i]];
+      }
+      const newG = [grid[rows[0]], grid[rows[1]], grid[rows[2]]];
+      const newS = [sol[rows[0]], sol[rows[1]], sol[rows[2]]];
+      for (let i = 0; i < 3; i++) {
+        grid[b * 3 + i] = newG[i];
+        sol[b * 3 + i] = newS[i];
+      }
+    }
+
+    return { grid, sol };
   }
 }
 

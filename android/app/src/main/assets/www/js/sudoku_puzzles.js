@@ -1,6 +1,5 @@
 /**
  * SUDOKU PUZZLE BANK - KHO ĐỀ ĐỒ SỘ CHUẨN XÁC THỰC TỪ SUDOKU.COM & ÁC MỘNG 17 Ô
- * Tổng số đề chuẩn: 712 đề + Động cơ sinh vô hạn đề (Isomorphism Engine)
  */
 (function() {
   const SUDOKU_PUZZLE_BANK = {
@@ -4297,65 +4296,31 @@
       "mission": "000000012040050000000009000070600400000100000000000050000087500601000300200000000",
       "solution": "598463712742851639316729845175632498869145273423978156934287561681594327257316984",
       "description": "Cấu trúc 17 ô đối xứng bán phần đặc biệt, tạo ra độ mông lung cực lớn khi giải."
-    },
-    {
-      "id": "royle-17-07",
-      "name": "Đề 17 ô Gordon Royle #7",
-      "clues": 17,
-      "win_rate": 3.8,
-      "mission": "000000012000000030000004000000500000000010600002000000000300000040000000000007000",
-      "solution": "435678912678921534912354786183549267594712683762836451251367849347185290829497135",
-      "description": "Đề 17 ô thưa thớt với tỉ lệ giải thành công dưới 3.8%!"
-    },
-    {
-      "id": "royle-17-08",
-      "name": "Đề 17 ô Gordon Royle #8",
-      "clues": 17,
-      "win_rate": 4.1,
-      "mission": "000000012000030000000400000000005000000600000007000800000000000080000090000000000",
-      "solution": "534789612769132485812456793148295376253671948976348125421567839387914562695823751",
-      "description": "Đề 17 ô phân bố tam giác độc đáo với nhiều mắt xích khó."
-    },
-    {
-      "id": "royle-17-09",
-      "name": "Đề 17 ô Gordon Royle #9",
-      "clues": 17,
-      "win_rate": 3.65,
-      "mission": "000000012000000300000400000000050000000600000007000000000000000080000090000000000",
-      "solution": "435678912678921534912354786183549267594712683762836451251367849347185290829497135",
-      "description": "Độ khó đỉnh cao với số lượng gợi ý tối thiểu toán học."
     }
-  ]
+  ],
+  "TOTAL_COUNT": 712
 };
 
-  /**
-   * Động cơ sinh đề vô hạn đẳng cấu (Sudoku Isomorphism Generator)
-   * Tạo ra hàng nghìn tỉ biến thể toán học chuẩn 100% 1 nghiệm từ các đề gốc
-   */
   SUDOKU_PUZZLE_BANK.generateInfinitePuzzle = function(level) {
     const list = SUDOKU_PUZZLE_BANK[level] || SUDOKU_PUZZLE_BANK.extreme;
     const base = list[Math.floor(Math.random() * list.length)];
-    
-    // Thuật toán hoán vị số (1-9)
     const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
     for (let i = digits.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [digits[i], digits[j]] = [digits[j], digits[i]];
     }
-    const map = { '0': '0' };
+    const map = { "0": "0" };
     for (let i = 0; i < 9; i++) map[String(i + 1)] = String(digits[i]);
-
-    let newMission = '';
-    let newSolution = '';
+    let newMission = "";
+    let newSolution = "";
     for (let i = 0; i < 81; i++) {
       newMission += map[base.mission[i]] || base.mission[i];
       newSolution += map[base.solution[i]] || base.solution[i];
     }
-
     const newId = (base.id ? base.id * 100 : 88000) + Math.floor(10 + Math.random() * 90);
     return {
       id: newId,
-      name: base.name ? (base.name + ' (Biến thể #' + newId + ')') : undefined,
+      name: base.name ? (base.name + " (Biến thể #" + newId + ")") : undefined,
       clues: base.clues,
       mission: newMission,
       solution: newSolution,
@@ -4365,12 +4330,8 @@
     };
   };
 
-  SUDOKU_PUZZLE_BANK.TOTAL_COUNT = 712;
+  SUDOKU_PUZZLE_BANK.TOTAL_COUNT = 709;
 
-  if (typeof window !== 'undefined') {
-    window.SUDOKU_PUZZLE_BANK = SUDOKU_PUZZLE_BANK;
-  }
-  if (typeof module !== 'undefined' && module.exports) {
-    module.exports = SUDOKU_PUZZLE_BANK;
-  }
+  if (typeof window !== "undefined") window.SUDOKU_PUZZLE_BANK = SUDOKU_PUZZLE_BANK;
+  if (typeof module !== "undefined" && module.exports) module.exports = SUDOKU_PUZZLE_BANK;
 })();

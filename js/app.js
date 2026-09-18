@@ -324,12 +324,14 @@ class SudokuApp {
         candGrid.className = 'candidates-grid';
         candGrid.style.display = 'none';
 
+        const candSpans = [];
         for (let num = 1; num <= 9; num++) {
           const cand = document.createElement('span');
           cand.className = 'candidate-num';
           cand.dataset.candidate = num;
           cand.textContent = num;
           candGrid.appendChild(cand);
+          candSpans.push(cand);
         }
 
         const valSpan = document.createElement('span');
@@ -337,6 +339,10 @@ class SudokuApp {
 
         cell.appendChild(candGrid);
         cell.appendChild(valSpan);
+
+        cell._valSpan = valSpan;
+        cell._candGrid = candGrid;
+        cell._candSpans = candSpans;
 
         cell.addEventListener('click', () => this.selectCell(r, c));
         this.dom.sudokuGrid.appendChild(cell);
@@ -3178,9 +3184,22 @@ class SudokuApp {
       effectiveStep = activeStep;
     }
 
-    const candidates = (effectiveStep && effectiveStep.candidatesState)
-      ? effectiveStep.candidatesState
-      : SudokuSolver.getAllCandidates(this.currentBoard);
+    // Kiểm tra nhanh xem bàn cờ có ô nào có số không
+    let hasAnyClue = false;
+    for (let r = 0; r < 9 && !hasAnyClue; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] !== 0) {
+          hasAnyClue = true;
+          break;
+        }
+      }
+    }
+
+    const candidates = (!hasAnyClue || !this.showCandidates)
+      ? null
+      : ((effectiveStep && effectiveStep.candidatesState)
+          ? effectiveStep.candidatesState
+          : SudokuSolver.getAllCandidates(this.currentBoard));
 
     // Lấy giá trị của ô đang chọn (nếu có số)
     let selectedVal = 0;
@@ -3253,8 +3272,9 @@ class SudokuApp {
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         const cell = this.cellElements[r][c];
-        const valSpan = cell.querySelector('.cell-value');
-        const candGrid = cell.querySelector('.candidates-grid');
+        const valSpan = cell._valSpan || cell.querySelector('.cell-value');
+        const candGrid = cell._candGrid || cell.querySelector('.candidates-grid');
+        const candSpans = cell._candSpans || Array.from(candGrid.children);
 
         // Xóa class highlight cũ
         cell.className = 'sudoku-cell';
@@ -3384,22 +3404,21 @@ class SudokuApp {
           valSpan.textContent = '';
           valSpan.style.display = 'none';
 
-          // Hiển thị bút chì (candidates / manual notes) nếu bật
-          if (this.showCandidates) {
+          // Hiển thị bút chì (candidates / manual notes) nếu bật và bàn cờ có dữ liệu
+          if (this.showCandidates && hasAnyClue) {
             let cellCands = [];
             if (this.isPreviewMode && effectiveStep && effectiveStep.candidatesState) {
               cellCands = effectiveStep.candidatesState[r][c] || [];
             } else if (activeStep && activeStep.candidatesState) {
               cellCands = activeStep.candidatesState[r][c] || [];
             } else if (this.pencilType === 'auto') {
-              cellCands = candidates[r][c] || [];
+              cellCands = (candidates && candidates[r]) ? (candidates[r][c] || []) : [];
             } else {
               cellCands = (this.manualCandidates && this.manualCandidates[r]) ? (this.manualCandidates[r][c] || []) : [];
             }
 
             if (cellCands.length > 0) {
               candGrid.style.display = 'grid';
-              const candSpans = candGrid.querySelectorAll('.candidate-num');
               candSpans.forEach(sp => {
                 const num = parseInt(sp.dataset.candidate, 10);
                 const hasCand = cellCands.includes(num);
@@ -3415,7 +3434,6 @@ class SudokuApp {
               });
             } else {
               candGrid.style.display = 'none';
-              const candSpans = candGrid.querySelectorAll('.candidate-num');
               candSpans.forEach(sp => {
                 sp.classList.remove('active', 'highlight-match');
                 sp.style.visibility = 'hidden';
@@ -3988,7 +4006,8 @@ class SudokuApp {
     this.closeGameOverModal();
     this.selectedCell = null;
     this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
-    this.togglePencilMode(false);
+    this.isPencilMode = false;
+    this.updatePencilUI();
     this.userMovesHistory = [];
 
     if (this.originalPuzzleGrid) {
@@ -4112,7 +4131,9 @@ class SudokuApp {
     this.closeGameOverModal();
     this.selectedCell = null;
     this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
-    this.togglePencilMode(false);
+    this.isPencilMode = false;
+    this.showCandidates = false;
+    this.updatePencilUI();
     this.initialBoard = Array.from({ length: 9 }, () => Array(9).fill(0));
     this.currentBoard = Array.from({ length: 9 }, () => Array(9).fill(0));
     this.originalPuzzleGrid = null;
@@ -4137,7 +4158,6 @@ class SudokuApp {
     this.setStatus('🗑️ Đã xóa sạch toàn bộ bàn cờ', '');
     this.updatePlayerControls();
     this.renderBoard();
-    this.updateInspector();
   }
 
   setStatus(text, indicatorClass = '') {

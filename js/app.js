@@ -1672,68 +1672,34 @@ class SudokuApp {
         }
       }
 
-      // 3. Fallback bộ đề chuẩn tích hợp sẵn (cho Android APK hoặc chế độ Offline)
+      // 3. Fallback: Lấy từ Kho đề chuẩn phong phú tích hợp sẵn (150+ đề Sudoku.com & Ác mộng)
       if (!data || !data.success || !data.grid) {
-        const fallbackPresets = {
-          nightmare: [
-            {
-              id: "inkala-2012",
-              name: "Everest (Khó nhất thế giới 2012)",
-              clues: 21,
-              win_rate: 2.10,
-              mission: "800000000003600000070090200050007000000045700000100030001000068008500010090000400",
-              solution: "812753649943682175675491283154237896369845721287169534521974368438526917796318452",
-              description: "Tuyệt tác 'Everest' của TS. Arto Inkala (2012) với độ sâu phân nhánh 11 sao!"
-            },
-            {
-              id: "inkala-2006",
-              name: "AI Escargot (Huyền thoại Ốc sên 2006)",
-              clues: 24,
-              win_rate: 3.25,
-              mission: "100007090030020008009600500005300900010080002600004000300000010041000007007000300",
-              solution: "162857493534129678789643521475312986913586742628794135356478219241935867897261354",
-              description: "Câu đố AI Escargot nổi tiếng nhất lịch sử với chuỗi liên kết đối kháng đa tầng."
-            },
-            {
-              id: "royle-17-01",
-              name: "Đề 17 ô Gordon Royle #1",
-              clues: 17,
-              win_rate: 4.85,
-              mission: "000000010400000000020000000000050407008000300001090000300400200050100000000806000",
-              solution: "693784512487512936125963874932651487568247391741398625319475268856129743274836159",
-              description: "Đạt giới hạn toán học tối thiểu 17 ô. Không thể tồn tại Sudoku 1 nghiệm với 16 ô!"
-            },
-            {
-              id: "royle-17-04",
-              name: "Đề 17 ô Gordon Royle #4",
-              clues: 17,
-              win_rate: 3.90,
-              mission: "000000012003600000000007000410020000000500300700000600280000040000300500000000000",
-              solution: "679835412123694758548217936416723895892561374735489621287956143961342587354178269",
-              description: "Chỉ 17 gợi ý ban đầu, tỉ lệ thắng tự nhiên của người chơi chỉ 3.9%!"
-            }
-          ],
-          extreme: [
-            { id: 777, mission: "300049000000600501752001000001000700500396000008150096003010060004000100000028000", solution: "316549827489672531752831649691284753547396218238157496873415962924763185165928374", win_rate: 28.99 }
-          ],
-          evil: [
-            { id: 293, mission: "009586000000020000400000683900650032060700098030200704003000000620015040000400050", solution: "319586427786324915452179683974658132261743598835291764543962871627815349198437256", win_rate: 49.5 }
-          ],
-          expert: [
-            { id: 638, mission: "150082000300070010000000753000527609000000500040063807400008000703040100008600300", solution: "157382496396475218284916753831527649672894531549163827415738962763249185928651374", win_rate: 37.95 }
-          ],
-          hard: [
-            { id: 79, mission: "100034008070680030008210704054090680910508020080300005305906871006000040001070200", solution: "162734598479685132538219764254197683913568427687342915345926871726851349891473256", win_rate: 40.25 }
-          ],
-          medium: [
-            { id: 358, mission: "203400005809160704006030019702003060008250000001607002007005926930720000600090470", solution: "213479685859162734476538219742913568368254197591687342187345926934726851625891473", win_rate: 48.91 }
-          ],
-          easy: [
-            { id: 433, mission: "900508007080302905054000080070680032100004008500219060000906001726001040001470056", solution: "913568427687342915254197683479685132162734598538219764345926871726851349891473256", win_rate: 63.26 }
-          ]
-        };
-        const list = fallbackPresets[selectedLevel] || fallbackPresets.extreme;
-        const p = list[Math.floor(Math.random() * list.length)];
+        const bank = (typeof window !== 'undefined' && window.SUDOKU_PUZZLE_BANK) ? window.SUDOKU_PUZZLE_BANK : null;
+        let list = (bank && bank[selectedLevel] && bank[selectedLevel].length > 0)
+          ? [...bank[selectedLevel]]
+          : [
+              { id: 777, mission: "300049000000600501752001000001000700500396000008150096003010060004000100000028000", solution: "316549827489672531752831649691284753547396218238157496873415962924763185165928374", win_rate: 28.99 }
+            ];
+
+        // Lọc săn đề tỉ lệ thắng thấp nếu người dùng yêu cầu
+        if (huntLow) {
+          const lowList = list.filter(p => (p.win_rate && p.win_rate < 27) || (p.clues && p.clues <= 21));
+          if (lowList.length > 0) {
+            list = lowList;
+          }
+        }
+
+        // Đảm bảo không trùng lặp với các bài vừa chơi gần đây
+        this.playedPuzzlesHistory = this.playedPuzzlesHistory || new Set();
+        let unplayed = list.filter(p => !this.playedPuzzlesHistory.has(String(p.id)));
+        if (unplayed.length === 0) {
+          this.playedPuzzlesHistory.clear();
+          unplayed = list;
+        }
+
+        const p = unplayed[Math.floor(Math.random() * unplayed.length)];
+        this.playedPuzzlesHistory.add(String(p.id));
+
         const parseStr = (s) => {
           const mat = [];
           for (let r = 0; r < 9; r++) {
@@ -1753,7 +1719,7 @@ class SudokuApp {
           solution: parseStr(p.solution),
           mission: p.mission,
           solutionStr: p.solution,
-          source: 'offline_preset'
+          source: 'sudoku_bank'
         };
       }
 

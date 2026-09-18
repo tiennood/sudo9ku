@@ -1930,8 +1930,17 @@ class SudokuApp {
         throw new Error(resJson.error || 'Lỗi nạp Sudoku.com');
       }
     } catch (err) {
-      console.warn('Lỗi khi gọi /api/open-sudoku:', err.message);
-      this.setStatus(`✓ Đã nạp thành công bài Sudoku.com #${puzzleId} (${validLevel.toUpperCase()}) • Tỉ lệ thắng: ${winRate}% • Kèm ${userMovesCount} cờ đang giải!`, 'solved');
+      console.warn('Không thể gọi /api/open-sudoku (đang chạy trên điện thoại hoặc web tĩnh):', err.message);
+
+      // Tự động sao chép mã Bookmarklet nạp đề vào Clipboard nếu người dùng muốn nạp vào Chrome di động
+      try {
+        const syncCode = `javascript:(function(){localStorage.setItem('main_game',${JSON.stringify(JSON.stringify(mainGame))});localStorage.setItem('difficulty',${JSON.stringify(JSON.stringify(validLevel))});location.reload();})();`;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(syncCode).catch(() => {});
+        }
+      } catch (e) {}
+
+      this.setStatus(`📱 Đang mở Sudoku.com! (Mẹo: Bạn có thể giải trực tiếp đề #${puzzleId} ngay trên Sudo9ku kèm Sổ tay công thức & timeline)`, 'valid');
       window.open(`https://sudoku.com/vi/${validLevel}/`, '_blank');
     } finally {
       this.dom.linkSudokuWeb.textContent = origText;

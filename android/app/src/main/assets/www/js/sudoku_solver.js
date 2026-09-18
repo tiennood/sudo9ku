@@ -204,4 +204,87 @@ export class SudokuSolver {
     countHelper();
     return count;
   }
+
+  /**
+   * Thuật toán Bào bớt ô có kiểm soát (Selective Clue Carving)
+   * Giảm tỉ lệ thắng & cố tình phá hủy các nước đi dễ để ép xuất hiện công thức cao cấp (Pointing, Pairs, X-Wing, Phản chứng)
+   * trong khi TUYỆT ĐỐI BẢO TOÀN 1 NGHIỆM DUY NHẤT (Unique Solution Guarantee).
+   */
+  static selectiveCarveClues(inputGrid, targetClues = 22, seedNumber = 2026) {
+    const g = this.cloneBoard(inputGrid);
+    let s = (Math.abs(seedNumber) * 16807) % 2147483647 || 2026;
+    const rnd = () => {
+      s = (s * 16807) % 2147483647;
+      return (s - 1) / 2147483646;
+    };
+
+    let currentClues = 0;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (g[r][c] !== 0) currentClues++;
+      }
+    }
+
+    if (currentClues <= targetClues) {
+      return { carvedGrid: g, remainingClues: currentClues, carvedCount: 0 };
+    }
+
+    let carvedCount = 0;
+    const maxAttempts = 35;
+    let attempt = 0;
+
+    while (currentClues > targetClues && attempt++ < maxAttempts) {
+      const candidates = this.getAllCandidates(g);
+      const givenClues = [];
+
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (g[r][c] !== 0) {
+            // Đếm số ô lân cận đang có ít ứng viên (dễ giải)
+            let easyPeers = 0;
+            for (let pr = 0; pr < 9; pr++) {
+              if (pr !== r && g[pr][c] === 0 && candidates[pr][c].length <= 2) easyPeers++;
+            }
+            for (let pc = 0; pc < 9; pc++) {
+              if (pc !== c && g[r][pc] === 0 && candidates[r][pc].length <= 2) easyPeers++;
+            }
+            const br = Math.floor(r / 3) * 3;
+            const bc = Math.floor(c / 3) * 3;
+            for (let dr = 0; dr < 3; dr++) {
+              for (let dc = 0; dc < 3; dc++) {
+                const pr = br + dr;
+                const pc = bc + dc;
+                if ((pr !== r || pc !== c) && g[pr][pc] === 0 && candidates[pr][pc].length <= 2) easyPeers++;
+              }
+            }
+
+            // Điểm ưu tiên: Càng phá hủy nhiều ô dễ giải càng được ưu tiên bào trước
+            const score = easyPeers * 10 + rnd() * 6;
+            givenClues.push({ r, c, val: g[r][c], score });
+          }
+        }
+      }
+
+      // Sắp xếp ưu tiên bào ô phá nước đi dễ
+      givenClues.sort((a, b) => b.score - a.score);
+
+      let carvedInPass = false;
+      for (const item of givenClues) {
+        g[item.r][item.c] = 0;
+        // Kiểm tra bảo toàn duy nhất 1 nghiệm
+        if (this.countSolutions(g, 2) === 1) {
+          currentClues--;
+          carvedCount++;
+          carvedInPass = true;
+          break; // Cập nhật lại bản đồ ứng viên cho lượt tiếp theo
+        } else {
+          g[item.r][item.c] = item.val; // Phục hồi nếu bị phân nhánh đa nghiệm
+        }
+      }
+
+      if (!carvedInPass) break;
+    }
+
+    return { carvedGrid: g, remainingClues: currentClues, carvedCount };
+  }
 }

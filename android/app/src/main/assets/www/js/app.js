@@ -870,6 +870,32 @@ class SudokuApp {
         this.updateCustomPuzzleShareLink();
       });
     });
+    const customWinrateBtns = document.querySelectorAll('.btn-custom-winrate');
+    const winrateLabel = document.getElementById('custom-winrate-label');
+    const winrateNames = {
+      nightmare: 'Ác mộng (< 10%)',
+      hardcore: 'Cực gắt (20 - 25%)',
+      standard: 'Tiêu chuẩn (30 - 40%)',
+      balanced: 'Cân bằng (> 45%)'
+    };
+    const winrateColors = {
+      nightmare: '#ef4444',
+      hardcore: '#f97316',
+      standard: '#f59e0b',
+      balanced: '#10b981'
+    };
+    customWinrateBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        customWinrateBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const rate = btn.dataset.rate || 'standard';
+        if (winrateLabel) {
+          winrateLabel.textContent = winrateNames[rate] || rate;
+          winrateLabel.style.color = winrateColors[rate] || '#f59e0b';
+        }
+        this.updateCustomPuzzleShareLink();
+      });
+    });
     const customTimerChoiceBtns = document.querySelectorAll('.btn-custom-timer-choice');
     customTimerChoiceBtns.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -5348,8 +5374,9 @@ class SudokuApp {
       const seedParam = urlParams.get('seed') || urlParams.get('m');
       const diffParam = urlParams.get('diff') || urlParams.get('level');
       const timerParam = urlParams.get('timer');
+      const rateParam = urlParams.get('rate') || urlParams.get('winrate');
       if (seedParam) {
-        this.loadPuzzleBySeed(seedParam, diffParam || 'medium', timerParam);
+        this.loadPuzzleBySeed(seedParam, diffParam || 'medium', timerParam, null, rateParam || 'standard');
         return;
       }
     } catch (e) {
@@ -5391,6 +5418,11 @@ class SudokuApp {
     return activeBtn ? activeBtn.dataset.diff : 'medium';
   }
 
+  getSelectedCustomWinRate() {
+    const activeBtn = document.querySelector('.btn-custom-winrate.active');
+    return activeBtn ? (activeBtn.dataset.rate || 'standard') : 'standard';
+  }
+
   getSelectedCustomTimerConfig() {
     const activeBtn = document.querySelector('.btn-custom-timer-choice.active');
     if (!activeBtn) return { mode: 'countup', mins: 0 };
@@ -5405,9 +5437,13 @@ class SudokuApp {
     const seed = (this.dom.customPuzzleSeedInput?.value.trim() || '2026').toUpperCase();
     const diff = this.getSelectedCustomDifficulty();
     const timerCfg = this.getSelectedCustomTimerConfig();
+    const winRate = this.getSelectedCustomWinRate();
 
     const baseUrl = window.location.origin + window.location.pathname;
-    const shareUrl = `${baseUrl}?seed=${encodeURIComponent(seed)}&diff=${diff}&timer=${timerCfg.mins}`;
+    let shareUrl = `${baseUrl}?seed=${encodeURIComponent(seed)}&diff=${diff}&timer=${timerCfg.mins}`;
+    if (winRate && winRate !== 'standard') {
+      shareUrl += `&rate=${winRate}`;
+    }
     this.dom.customShareUrlBox.textContent = shareUrl;
     if (this.dom.customLinkCopiedToast) {
       this.dom.customLinkCopiedToast.style.display = 'none';
@@ -5449,17 +5485,19 @@ class SudokuApp {
     const seed = (this.dom.customPuzzleSeedInput?.value.trim() || '2026').toUpperCase();
     const diff = this.getSelectedCustomDifficulty();
     const timerCfg = this.getSelectedCustomTimerConfig();
+    const winRate = this.getSelectedCustomWinRate();
 
     this.closeCustomPuzzleModal();
-    this.loadPuzzleBySeed(seed, diff, timerCfg.mins, timerCfg.mode);
+    this.loadPuzzleBySeed(seed, diff, timerCfg.mins, timerCfg.mode, winRate);
   }
 
-  loadPuzzleBySeed(seedStr, difficulty = 'medium', timerMinutes = null, timerMode = null) {
+  loadPuzzleBySeed(seedStr, difficulty = 'medium', timerMinutes = null, timerMode = null, winRateTier = 'standard') {
     const seed = String(seedStr).trim().toUpperCase();
     const diff = String(difficulty || 'medium').toLowerCase();
+    const rateTier = String(winRateTier || 'standard').toLowerCase();
 
-    // Sinh ma trận câu đố và nghiệm chuẩn dựa trên Seed
-    const puzzle = this.generatePuzzleFromSeed(seed, diff);
+    // Sinh ma trận câu đố và nghiệm chuẩn dựa trên Seed & Tỉ lệ thắng (Selective Carving)
+    const puzzle = this.generatePuzzleFromSeed(seed, diff, rateTier);
     if (!puzzle || !puzzle.grid || !puzzle.sol) {
       this.setStatus('Lỗi tạo đề từ mã đề ' + seed, 'conflict');
       return;
@@ -5500,28 +5538,37 @@ class SudokuApp {
     };
     const diffName = diffNames[diff] || diff;
 
+    const rateLabels = {
+      nightmare: '< 10% (Ác mộng)',
+      hardcore: '20 - 25% (Cực gắt)',
+      standard: '30 - 40% (Tiêu chuẩn)',
+      balanced: '> 45% (Cân bằng)'
+    };
+    const rateInfo = rateLabels[rateTier] ? ` • Thắng: ${rateLabels[rateTier]}` : '';
+
     this.activeCustomSeed = seed;
     this.activeCustomDifficulty = diff;
+    this.activeCustomWinRate = rateTier;
 
     const clueCount = puzzle.grid.flat().filter(x => x > 0).length;
     this.solveAndPrepareWalkthrough(clueCount, puzzle.sol);
 
-    this.startNewGameRecord(`Đề #${seed} (${diffName})`);
+    this.startNewGameRecord(`Đề #${seed} (${diffName}${rateInfo ? ` • ${rateLabels[rateTier]}` : ''})`);
     this.renderBoard();
     this.updateInspector();
     this.syncSolvingWalkthroughWithCurrentBoard();
     this.updateSolutionPreviewLockUI();
 
     if (this.dom.fetchStatusInfo) {
-      this.dom.fetchStatusInfo.innerHTML = `🎲 Đề <strong>#${seed}</strong> • ${diffName} • ${clueCount} ô`;
+      this.dom.fetchStatusInfo.innerHTML = `🎲 Đề <strong>#${seed}</strong> • ${diffName}${rateInfo} • ${clueCount} ô`;
     }
     this.switchMobileTab('board');
 
     this.playSound('step');
-    this.setStatus(`🎮 Đã nạp Đề #${seed} • Cấp độ: ${diffName}! Hãy cùng so tài nào!`, 'valid');
+    this.setStatus(`🎮 Đã nạp Đề #${seed} • Cấp độ: ${diffName}${rateInfo}! Hãy cùng so tài nào!`, 'valid');
   }
 
-  generatePuzzleFromSeed(seedStr, difficulty = 'medium') {
+  generatePuzzleFromSeed(seedStr, difficulty = 'medium', winRateTier = 'standard') {
     const basePuzzles = {
       easy: {
         m: '900508007080302905054000080070680032100004008500219060000906001726001040001470056',
@@ -5557,6 +5604,15 @@ class SudokuApp {
       return (s - 1) / 2147483646;
     };
 
+    // Số lượng manh mối đích dựa trên Tỉ lệ thắng mục tiêu (Thuật toán Bào ô Selective Clue Carving)
+    const targetCluesMap = {
+      nightmare: 19,
+      hardcore: 22,
+      standard: 25,
+      balanced: 29
+    };
+    const targetClues = targetCluesMap[winRateTier] || 25;
+
     // Lấy ma trận hạt nhân chuẩn từ kho 712 đề dựa trên mã Seed và Cấp độ
     const bank = (typeof window !== 'undefined' && window.SUDOKU_PUZZLE_BANK) ? window.SUDOKU_PUZZLE_BANK : null;
     const cleanSeed = str.toUpperCase();
@@ -5574,11 +5630,15 @@ class SudokuApp {
     }
 
     if (exactMatch) {
-      const g = [];
-      const sl = [];
+      let g = [];
+      let sl = [];
       for (let r = 0; r < 9; r++) {
         g.push(exactMatch.mission.slice(r * 9, (r + 1) * 9).split('').map(Number));
         sl.push(exactMatch.solution.slice(r * 9, (r + 1) * 9).split('').map(Number));
+      }
+      if (winRateTier && (winRateTier === 'nightmare' || winRateTier === 'hardcore')) {
+        const carveResult = SudokuSolver.selectiveCarveClues(g, targetClues, s);
+        g = carveResult.carvedGrid;
       }
       return { grid: g, sol: sl, exactMatch: true, win_rate: exactMatch.win_rate, id: exactMatch.id };
     }
@@ -5626,7 +5686,11 @@ class SudokuApp {
       }
     }
 
-    return { grid, sol };
+    // 3. Selective Clue Carving: Bào bớt ô có kiểm soát để ép công thức khó & giảm tỉ lệ thắng theo yêu cầu
+    const carveResult = SudokuSolver.selectiveCarveClues(grid, targetClues, s);
+    grid = carveResult.carvedGrid;
+
+    return { grid, sol, carvedCount: carveResult.carvedCount, remainingClues: carveResult.remainingClues };
   }
 }
 

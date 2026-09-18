@@ -1409,10 +1409,29 @@
         </span>
       </div>
 
+      <!-- Tỉ Lệ Thắng Mục Tiêu & Bào Ô Nâng Cao (Selective Clue Carving) -->
+      <div style="margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-main);">
+            3. Tỉ Lệ Thắng Mục Tiêu (Thuật toán bào ô ép công thức):
+          </label>
+          <span id="custom-winrate-label" style="font-size: 0.74rem; font-weight: 800; color: #f59e0b;">Tiêu chuẩn (30 - 40%)</span>
+        </div>
+        <div class="custom-winrate-pills" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+          <button type="button" class="btn btn-secondary btn-sm btn-custom-winrate" data-rate="nightmare" style="padding: 7px 4px; font-size: 0.75rem; line-height: 1.3;">💀 &lt; 10%<br><span style="font-size: 0.65rem; color: var(--text-muted);">Ác mộng</span></button>
+          <button type="button" class="btn btn-secondary btn-sm btn-custom-winrate" data-rate="hardcore" style="padding: 7px 4px; font-size: 0.75rem; line-height: 1.3;">🔴 20 - 25%<br><span style="font-size: 0.65rem; color: var(--text-muted);">Cực gắt</span></button>
+          <button type="button" class="btn btn-secondary btn-sm btn-custom-winrate active" data-rate="standard" style="padding: 7px 4px; font-size: 0.75rem; line-height: 1.3;">🟠 30 - 40%<br><span style="font-size: 0.65rem; color: var(--text-muted);">Tiêu chuẩn</span></button>
+          <button type="button" class="btn btn-secondary btn-sm btn-custom-winrate" data-rate="balanced" style="padding: 7px 4px; font-size: 0.75rem; line-height: 1.3;">🟡 &gt; 45%<br><span style="font-size: 0.65rem; color: var(--text-muted);">Cân bằng</span></button>
+        </div>
+        <span style="font-size: 0.72rem; color: var(--text-muted); display: block; margin-top: 4px;">
+          ⛏️ <strong>Bào ô có kiểm soát:</strong> Giảm tỉ lệ thắng sẽ kích hoạt thuật toán bào bớt các số dễ, ép buộc xuất hiện chuỗi Pointing, X-Wing hoặc Phản chứng (Nishio Chains).
+        </span>
+      </div>
+
       <!-- Thời Gian Tùy Chỉnh Cho Ván Chơi -->
       <div style="margin-bottom: 16px;">
         <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-main); display: block; margin-bottom: 6px;">
-          3. Thời Gian Cho Ván Đấu:
+          4. Thời Gian Cho Ván Đấu:
         </label>
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
           <button type="button" class="btn btn-secondary btn-sm btn-custom-timer-choice active" data-mode="countup" data-mins="0" style="font-size: 0.76rem; padding: 7px 4px;">⏱️ Bấm giờ</button>

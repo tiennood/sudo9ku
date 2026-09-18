@@ -1,0 +1,13 @@
+{
+  "name": "sudoku",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tools/run_tests.js",
+    "test:watch": "node tools/run_tests.js --watch",
+    "test:diagnose": "node tools/run_tests.js --diagnose"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.11.0"
+  }
+}

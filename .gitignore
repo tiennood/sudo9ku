@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Android build outputs & local config
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+.gradle/
+tools/android-sdk/
+tools/cmdline-tools/
+tools/jdk17/
+tools/*.png
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local test screenshots & artifacts in root
+*.log
+*.png
+*.zip
+*.apk
+*.jar
+scratch/
+tools/cmdline-tools.zip
+tools/android-sdk/
+tools/cmdline-tools/
+tools/jdk17/
+tools/gradle/
+android/.gradle/
+android/app/build/
+android/build/
+android/gradle/wrapper/gradle-wrapper.jar

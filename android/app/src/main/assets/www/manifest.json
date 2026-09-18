@@ -1,0 +1,32 @@
+{
+  "name": "Sudo9ku - Giải Sudoku Qua Ảnh",
+  "short_name": "Sudo9ku",
+  "description": "Ứng dụng giải Sudoku bằng camera/hình ảnh, giải thích từng bước logic và xem trước nước đi.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait-primary",
+  "categories": ["games", "utilities", "education"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

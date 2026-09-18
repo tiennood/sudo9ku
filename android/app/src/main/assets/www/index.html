@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0b0f19">
+  <title>Sudo9ku - Giải Sudoku Qua Hình Ảnh & Từng Bước Chi Tiết</title>
+  <meta name="description" content="Ứng dụng nhận diện và giải Sudoku thông qua hình ảnh, hiển thị trước đáp án và hướng dẫn giải thích từng bước cho từng ô bằng tiếng Việt.">
+
+  <!-- PWA & Android App Support -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Google Fonts: Outfit & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css?v=8">
+</head>
+<body>
+
+  <!-- Top App Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area">
+        <div class="logo-icon">9</div>
+        <div class="logo-title">
+          <h1>Sudo9ku <span class="logo-badge">Step Solver AI</span></h1>
+          <p class="logo-subtitle">Giải Sudoku qua hình ảnh &amp; Giải thích từng bước bằng Tiếng Việt</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-sample" class="btn btn-primary btn-sm" title="Nạp nhanh ảnh mẫu của bạn">
+          <span>⚡</span> Ảnh mẫu
+        </button>
+        <button id="btn-sound-toggle" class="btn btn-secondary btn-icon" title="Bật/Tắt âm thanh">
+          <span id="sound-icon">🔊</span>
+        </button>
+        <button id="btn-theme-toggle" class="btn btn-secondary btn-icon" title="Chuyển đổi Sáng / Tối">
+          <span id="theme-icon">🌙</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile Segmented Navigation Tabs (Only visible on mobile screens) -->
+  <nav class="mobile-tabs-nav" id="mobile-tabs-nav">
+    <button class="mobile-tab-btn active" data-tab="board">
+      <span class="tab-icon">🎮</span>
+      <span class="tab-label">Bàn cờ</span>
+    </button>
+    <button class="mobile-tab-btn" data-tab="scanner">
+      <span class="tab-icon">📷</span>
+      <span class="tab-label">Quét ảnh</span>
+    </button>
+    <button class="mobile-tab-btn" data-tab="solver">
+      <span class="tab-icon">💡</span>
+      <span class="tab-label">Lời giải</span>
+    </button>
+  </nav>
+
+  <!-- Main 3-Column Content Layout -->
+  <main class="main-wrapper">
+
+    <!-- Column 1: Image Input & OCR Panel -->
+    <section id="panel-scanner" class="glass-panel input-panel mobile-panel-scanner">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          <span class="panel-title-icon">📷</span> Nhận Diện Từ Ảnh
+        </h2>
+      </div>
+
+      <!-- Mobile Quick Camera Button (chỉ hiện trên màn hình điện thoại) -->
+      <input type="file" id="mobile-camera-input" accept="image/*" capture="environment" style="display: none;">
+      <button id="btn-mobile-camera" class="btn btn-primary btn-mobile-camera" style="width: 100%; margin-bottom: 12px; display: none;">
+        📸 Chụp Bằng Camera Điện Thoại
+      </button>
+
+      <!-- Direct Sudoku.com Live Fetch Card -->
+      <div class="sudoku-fetch-card" id="sudoku-fetch-card">
+        <div class="fetch-card-header">
+          <span class="fetch-card-title">
+            <span>🌐</span> Sudoku.com Trực Tiếp
+          </span>
+          <span class="fetch-badge-live">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981;"></span> Đồng bộ live
+          </span>
+        </div>
+        <div class="fetch-controls-grid">
+          <select id="select-sudoku-level" class="fetch-level-select" title="Chọn cấp độ từ Sudoku.com hoặc Thử thách Ác mộng">
+            <option value="nightmare">☠️ Ác mộng (&lt; 5% - 17 ô &amp; Khó nhất TG)</option>
+            <option value="extreme" selected>🔴 Cực khó (Extreme ~27%)</option>
+            <option value="evil">🟣 Độc địa (Evil ~49%)</option>
+            <option value="expert">🟠 Chuyên gia (Expert ~37%)</option>
+            <option value="hard">🟡 Khó (Hard ~40%)</option>
+            <option value="medium">🔵 Trung bình (Medium ~48%)</option>
+            <option value="easy">🟢 Dễ (Easy ~63%)</option>
+          </select>
+          <button id="btn-fetch-sudoku" class="btn btn-primary btn-sm" title="Tải câu đố ngẫu nhiên từ Sudoku.com">
+            ⚡ Lấy đề mới
+          </button>
+        </div>
+        <div class="fetch-quick-actions" style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
+          <button id="btn-open-extreme-arena" class="btn btn-danger btn-sm btn-arena-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #ef4444, #991b1b); color: #fff; box-shadow: 0 0 14px rgba(239, 68, 68, 0.45); cursor: pointer; border: 1px solid rgba(254, 202, 202, 0.3);" title="Mở Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9">
+            ⚔️ Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9
+          </button>
+          <button id="btn-nightmare-mode" class="btn btn-nightmare btn-sm" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; background: linear-gradient(135deg, #7f1d1d, #450a0a); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; font-weight: 600; cursor: pointer;" title="Nạp ngay đề Ác mộng khó nhất hành tinh (Tỉ lệ thắng < 5%)">
+            ☠️ Thử thách Ác mộng (< 5%)
+          </button>
+          <button id="btn-hunt-low-rate" class="btn btn-secondary btn-sm" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; border-radius: 6px; font-weight: 500;" title="Săn các câu đố cực hiếm có tỉ lệ thắng < 25% trên Sudoku.com">
+            🎯 Săn đề < 25%
+          </button>
+        </div>
+        <div class="fetch-info-bar">
+          <span id="fetch-status-info">Đề bài: Cực khó (Mặc định)</span>
+          <a id="link-sudoku-web" href="https://sudoku.com/vi/extreme/" target="_blank" rel="noopener" class="fetch-external-link" title="Mở trên trang Sudoku.com">
+            Sudoku.com ↗
+          </a>
+        </div>
+      </div>
+
+      <!-- Drag & Drop Zone -->
+      <div id="dropzone" class="dropzone">
+        <div class="dropzone-icon">🖼️</div>
+        <div class="dropzone-text">Kéo thả hoặc tải ảnh Sudoku lên</div>
+        <div class="dropzone-hint">Hỗ trợ PNG, JPG, WebP hoặc chụp ảnh</div>
+        <span class="keyboard-shortcut-hint">Mẹo: Nhấn Ctrl + V để dán ảnh chụp màn hình</span>
+        <input type="file" id="file-input" accept="image/*" style="display: none;">
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="quick-inputs-row">
+        <button id="btn-upload-file" class="btn btn-secondary btn-sm">
+          📁 Tải File Lên
+        </button>
+        <button id="btn-open-camera" class="btn btn-secondary btn-sm">
+          📸 Mở Camera
+        </button>
+      </div>
+
+      <!-- Preset Sample Image Card -->
+      <div id="sample-preset-card" class="sample-preset-card" title="Bấm để nạp ngay ảnh đề bài mẫu bạn đã gửi">
+        <img src="assets/sample.png" alt="Ảnh mẫu Sudoku" class="sample-thumb" id="sample-preset-thumb">
+        <div class="sample-info">
+          <h4>Ảnh mẫu cắt sẵn</h4>
+          <p>Nhấp để nạp &amp; nhận diện ngay</p>
+        </div>
+      </div>
+
+      <!-- Preset Sudoku.com Fullpage Card -->
+      <div id="sample-web-card" class="sample-preset-card" style="margin-top: 8px;" title="Bấm để nạp ảnh chụp web Sudoku.com toàn màn hình">
+        <img src="assets/sudoku_web.png" alt="Ảnh web Sudoku.com" class="sample-thumb" id="sample-web-thumb">
+        <div class="sample-info">
+          <h4>Ảnh web Sudoku.com</h4>
+          <p>Toàn màn hình máy tính</p>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div id="progress-container" class="progress-container">
+        <div class="progress-status">
+          <span id="progress-text">Đang nhận diện lưới...</span>
+          <span id="progress-percent">0%</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- Image Preview with Grid Overlay -->
+      <div id="preview-container" class="preview-container">
+        <div class="preview-wrapper" id="preview-wrapper">
+          <img id="image-preview" alt="Xem trước ảnh Sudoku">
+          <canvas id="grid-overlay-canvas" class="grid-overlay-canvas"></canvas>
+        </div>
+        <div class="crop-hint-badge">
+          <span>🎯 Khung xanh đã khóa vị trí bàn cờ. Bạn có thể kéo các điểm neo để co giãn / di chuyển nếu muốn.</span>
+        </div>
+      </div>
+
+      <!-- Scan & Recog Tools -->
+      <div id="crop-actions-bar" class="crop-actions-bar" style="margin-top: 12px; display: none; gap: 8px; flex-wrap: wrap;">
+        <button id="btn-draw-crop" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px;" title="Bấm vào đây rồi dùng chuột kéo hình chữ nhật trên ảnh để chọn bàn cờ">
+          📐 Kéo chọn thủ công
+        </button>
+        <button id="btn-auto-detect" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px;" title="Tự động tìm kiếm lại bàn cờ trên toàn bộ ảnh">
+          🔍 Tự động tìm lại
+        </button>
+        <button id="btn-reprocess" class="btn btn-primary btn-sm" style="width: 100%;" title="Quét và nhận diện lại các ô theo khung hiện tại">
+          ⚡ Nhận diện theo khung này
+        </button>
+      </div>
+    </section>
+
+
+    <!-- Column 2: 9x9 Sudoku Board Panel -->
+    <section id="panel-board" class="glass-panel board-container mobile-panel-board mobile-panel-active">
+      <div class="board-toolbar">
+        <div class="board-toolbar-top">
+          <div class="board-status-badge">
+            <span id="status-indicator" class="status-indicator"></span>
+            <span id="status-text">Sẵn sàng nhận diện</span>
+          </div>
+
+          <div class="board-mistake-wrap">
+            <div id="mistakes-badge" class="mistakes-badge info-only" title="Số lỗi vi phạm hiện tại">
+              <span class="mistake-icon">❌</span>
+              <span class="mistake-label">Lỗi:</span>
+              <strong id="mistake-counter-text" class="mistake-count">0 / 10</strong>
+            </div>
+            <button id="btn-open-history" class="btn btn-secondary btn-xs btn-history-stats" style="display: none !important;" aria-hidden="true" title="Lịch sử lỗi">
+              📊 Lịch sử lỗi
+            </button>
+          </div>
+        </div>
+
+        <div class="board-tools">
+          <button id="btn-open-extreme-arena-alt" class="btn btn-danger btn-sm btn-arena-glow" style="background: linear-gradient(135deg, #ef4444, #b91c1c); color: #fff; font-weight: 700; border: 1px solid rgba(254, 202, 202, 0.3);" title="Mở Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9">
+            ⚔️ Đấu trường Extreme
+          </button>
+          <button id="btn-quick-fetch-sudoku" class="btn btn-primary btn-sm" title="Lấy ngay bài Sudoku.com theo cấp độ hiện tại">
+            🌐 Sudoku.com
+          </button>
+          <button id="btn-open-formula-guide" class="btn btn-secondary btn-sm" title="Mở Sổ tay công thức & Kỹ thuật giải Sudoku">
+            📖 Sổ tay công thức
+          </button>
+          <button id="btn-preview-next" class="btn btn-accent btn-sm" title="Xem trước nước đi tiếp theo (hiển thị ô đích và các ô chặn xung quanh)">
+            🔍 Xem trước nước tiếp
+          </button>
+          <button id="btn-open-unified-settings" class="btn btn-secondary btn-sm" title="Tùy chỉnh cài đặt Sudoku (Tia gióng, Bút chì, Số lượt lỗi)">
+            ⚙️ Tùy chỉnh
+          </button>
+          <button id="btn-restart-game" class="btn btn-secondary btn-sm" title="Đặt lại bàn cờ về ban đầu và bắt đầu lại ván này">
+            🔄 Chơi lại
+          </button>
+          <button id="btn-clear-board" class="btn btn-secondary btn-sm" title="Xóa toàn bộ bàn cờ">
+            🗑️ Xóa cờ
+          </button>
+          <!-- Compatibility hidden triggers -->
+          <button id="btn-open-crosshatch-settings" style="position: absolute; top: 0; left: 0; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+          <button id="btn-open-pencil-settings" style="position: absolute; top: 0; left: 10px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+          <button id="btn-crosshatch-toggle" style="position: absolute; top: 0; left: 20px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"><span id="crosshatch-btn-label"></span></button>
+          <button id="btn-pencil-toggle" style="position: absolute; top: 0; left: 30px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"><span id="pencil-btn-label"></span></button>
+        </div>
+      </div>
+
+      <!-- Extreme Arena HUD Bar (Hiện khi trong chế độ Đấu Trường Sinh Tồn) -->
+      <div id="arena-hud-bar" class="arena-hud-bar" style="display: none;">
+        <div class="arena-hud-left">
+          <div class="arena-hud-seed-group">
+            <span class="arena-hud-badge seed-badge" id="arena-hud-seed">Đề #1367</span>
+            <span class="arena-hud-badge winrate-badge" id="arena-hud-winrate" title="Tỉ lệ người chơi giải được đề này">48.13%</span>
+            <span class="arena-hud-badge transform-badge" id="arena-hud-transform" title="Hệ quy chiếu góc nhìn chống nhìn trộm">📐 Chuẩn</span>
+          </div>
+          <div class="arena-hud-timer-group">
+            <span id="arena-hud-timer" class="arena-hud-timer">⏳ 10:00</span>
+            <span id="arena-hud-lives" class="arena-hud-lives">❤️❤️❤️ <span class="life-num">(0/3)</span></span>
+          </div>
+        </div>
+
+        <div class="arena-hud-center">
+          <div class="arena-target-box">
+            <span class="arena-target-label">🎯 SĂN SỐ:</span>
+            <div id="arena-hud-held-numbers" class="arena-held-numbers-wrap">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+
+        <div class="arena-hud-right">
+          <button id="btn-arena-sacrifice-life" class="btn btn-warning btn-xs arena-action-btn" title="Chấp nhận tăng 1 lỗi vi phạm (+1 lỗi) để mở khóa thêm 1 số ngẫu nhiên (tối đa giữ 3 số)">
+            💔 Đổi 1 lỗi lấy số
+          </button>
+          <button id="btn-arena-radar" class="btn btn-info btn-xs arena-action-btn" title="Rọi sáng viền ô mục tiêu chứa số bạn đang cầm (Không lộ số đáp án, tối đa 2 lần/ván)">
+            📡 Radar (2)
+          </button>
+          <button id="btn-arena-quit" class="btn btn-secondary btn-xs arena-quit-btn" title="Bỏ cuộc và hoàn nguyên bàn cờ">
+            ✕ Thoát
+          </button>
+        </div>
+      </div>
+
+      <!-- Deduction Preview Banner -->
+      <div id="preview-banner" class="preview-banner" style="display: none;">
+        <div class="preview-banner-header">
+          <div class="preview-banner-title">
+            <span class="preview-badge-pulse">💡</span>
+            <strong id="preview-title">Xem trước nước đi tiếp theo</strong>
+          </div>
+          <button id="btn-close-preview" class="btn-banner-close" title="Đóng chế độ xem trước">✕</button>
+        </div>
+        <p id="preview-explanation" class="preview-banner-text"></p>
+        <div class="preview-banner-actions">
+          <button id="btn-apply-preview" class="btn btn-primary btn-sm">
+            ✔️ Điền số này
+          </button>
+          <button id="btn-next-preview" class="btn btn-secondary btn-sm">
+            ⏩ Xem tiếp bước nữa
+          </button>
+        </div>
+      </div>
+
+      <!-- 9x9 Sudoku Grid -->
+      <div class="sudoku-board-wrapper">
+        <div id="sudoku-grid" class="sudoku-grid">
+          <!-- 81 ô sẽ được sinh tự động qua JavaScript -->
+        </div>
+      </div>
+
+      <!-- Numpad for Touch / Mouse editing -->
+      <div class="numpad-container">
+        <button class="numpad-btn" data-val="1">1</button>
+        <button class="numpad-btn" data-val="2">2</button>
+        <button class="numpad-btn" data-val="3">3</button>
+        <button class="numpad-btn" data-val="4">4</button>
+        <button class="numpad-btn" data-val="5">5</button>
+        <button class="numpad-btn" data-val="6">6</button>
+        <button class="numpad-btn" data-val="7">7</button>
+        <button class="numpad-btn" data-val="8">8</button>
+        <button class="numpad-btn" data-val="9">9</button>
+        <button id="btn-numpad-pencil" class="numpad-btn action-btn btn-pencil-numpad" title="Bật/Tắt chế độ ghi chú bút chì (Phím tắt: P hoặc N)">
+          ✏️ <span id="numpad-pencil-text">Ghi chú: TẮT</span>
+        </button>
+        <button class="numpad-btn action-btn" data-val="0" title="Xóa số hoặc xóa số nháp ở ô đang chọn">⌫ Xóa</button>
+      </div>
+    </section>
+
+
+    <!-- Column 3: Walkthrough & Step-by-Step Explanation Hub -->
+    <section id="panel-solver" class="glass-panel walkthrough-panel mobile-panel-solver">
+      <div class="panel-header">
+        <h2 class="panel-title">
+          <span class="panel-title-icon">💡</span> Lời Giải &amp; Hướng Dẫn
+        </h2>
+      </div>
+
+      <!-- Solution Preview Card ("Cho biết trước đáp án") -->
+      <div class="solution-preview-card">
+        <div class="solution-preview-content" style="width: 100%;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <div>
+              <strong style="font-size: 0.95rem;">Xem trước đáp án</strong>
+              <p id="solution-preview-subtext" style="font-size: 0.74rem; color: var(--text-muted);">Bật để xem trước hoặc điền đáp án chuẩn</p>
+            </div>
+            <div class="toggle-switch-wrap">
+              <label class="switch" title="Bật/Tắt xem toàn bộ đáp án">
+                <input type="checkbox" id="toggle-solution">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+          <button id="btn-fill-all-solution" class="btn btn-primary btn-sm" style="width: 100%; margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700; border-radius: 8px; padding: 7px 12px;" title="Điền toàn bộ tất cả số đáp án đúng vào bàn cờ">
+            <span>✨ Điền tất cả số đáp án đúng</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step Player Controls ("Các bước giải của từng ô") -->
+      <div class="step-player-card">
+        <div class="step-timeline-header">
+          <span style="font-size: 0.85rem; font-weight: 600;">Tiến trình bước giải</span>
+          <span id="step-counter" class="step-counter">Bước 0 / 0</span>
+        </div>
+
+        <input type="range" id="step-slider" class="step-slider" min="0" max="0" value="0">
+
+        <div class="step-controls">
+          <button id="btn-step-start" class="btn btn-secondary btn-icon" title="Về bước đầu tiên">⏮</button>
+          <button id="btn-step-prev" class="btn btn-secondary btn-icon" title="Bước lùi lại">◀</button>
+          <button id="btn-step-play" class="btn btn-primary btn-play" title="Tự động chạy các bước">▶</button>
+          <button id="btn-step-next" class="btn btn-secondary btn-icon" title="Bước tiếp theo">▶</button>
+          <button id="btn-step-end" class="btn btn-secondary btn-icon" title="Đến kết quả cuối cùng">⏭</button>
+        </div>
+
+        <div class="speed-selector">
+          <span>Tốc độ:</span>
+          <button class="speed-btn" data-speed="2000">Chậm (2s)</button>
+          <button class="speed-btn active" data-speed="1000">Vừa (1s)</button>
+          <button class="speed-btn" data-speed="400">Nhanh (0.4s)</button>
+        </div>
+
+        <button id="btn-sync-current-board" class="btn btn-secondary btn-xs" style="display: none; width: 100%; margin-top: 8px; font-weight: 600; border-radius: 6px; padding: 6px 8px; justify-content: center; align-items: center; gap: 6px; background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.4); color: var(--accent-cyan);" title="Quay về nước cờ hiện tại bạn đang chơi trên bàn">
+          <span>↩ Về nước cờ hiện tại của bạn (<strong id="current-user-step-num">Bước 0</strong>)</span>
+        </button>
+      </div>
+
+      <!-- Live Step Explanation Card -->
+      <div class="explanation-card">
+        <div class="explanation-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+          <span id="formula-badge" class="formula-badge">
+            📘 <strong id="strategy-name-text">Khởi tạo</strong>
+          </span>
+          <button id="btn-view-current-formula" class="btn btn-secondary btn-xs" style="font-size: 0.74rem; padding: 4px 8px; border-radius: 6px;" title="Xem hướng dẫn chi tiết cách dùng công thức này trong Sổ tay">
+            📖 Cách dùng công thức này
+          </button>
+        </div>
+        <h3 id="step-details-title" class="step-details-title">Sẵn sàng phân tích bước giải</h3>
+        
+        <!-- Formula Rule Box -->
+        <div id="step-rule-box" class="formula-rule-box" style="display: none;"></div>
+
+        <!-- Structured Explanation Sections -->
+        <div class="explanation-sections">
+          <div class="exp-section">
+            <span class="exp-label">🔍 Dấu hiệu nhận diện:</span>
+            <p id="step-pattern-text" class="exp-value">Tải ảnh lên hoặc bấm "Lấy bài từ Sudoku.com" để hệ thống tự động suy luận.</p>
+          </div>
+          <div class="exp-section">
+            <span class="exp-label">💡 Logic suy luận:</span>
+            <p id="step-explanation-text" class="exp-value">Hệ thống sẽ giải thích chi tiết quy tắc logic của từng ô.</p>
+          </div>
+          <div class="exp-section" id="section-action" style="display: none;">
+            <span class="exp-label">🎯 Thao tác thực hiện:</span>
+            <p id="step-action-text" class="exp-value"></p>
+          </div>
+        </div>
+
+        <button id="btn-apply-walkthrough-step" class="btn btn-primary btn-xs" style="display: none; width: 100%; margin-top: 8px; font-weight: 700; border-radius: 6px; padding: 7px 10px; justify-content: center; align-items: center; gap: 6px; background: linear-gradient(135deg, #10b981, #059669); border: none; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);" title="Áp dụng ngay bước giải gợi ý này vào bàn cờ chính">
+          <span>✨ Áp dụng bước gợi ý này vào bàn cờ</span>
+        </button>
+
+        <div id="step-meta-chips" class="step-meta-chips"></div>
+      </div>
+
+      <!-- Interactive Cell Inspector -->
+      <div class="cell-inspector-card">
+        <div class="inspector-header">
+          <span>🔍 Thông tin ô đang chọn</span>
+          <span id="inspector-coords">Chưa chọn ô</span>
+        </div>
+        <div id="inspector-content" class="inspector-content">
+          Nhấp vào bất kỳ ô nào trên bàn cờ để xem chi tiết ứng viên và bước giải của ô đó.
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal Camera -->
+  <div id="camera-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Chụp Ảnh Sudoku</h3>
+        <button id="btn-close-camera" class="btn btn-secondary btn-sm">✕</button>
+      </div>
+      <video id="camera-video" autoplay playsinline style="width: 100%; border-radius: 8px; background: #000;"></video>
+      <div style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button id="btn-capture-photo" class="btn btn-primary">📸 Chụp và Quét</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Cài Đặt Ứng Dụng Android & Mã QR -->
+  <div id="phone-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 460px; text-align: center;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span>🤖</span> Ứng Dụng Android - Sudo9ku
+        </h3>
+        <button id="btn-close-phone-modal" class="btn btn-secondary btn-sm">✕</button>
+      </div>
+
+      <!-- App Card Preview -->
+      <div style="display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-color); padding: 12px 14px; border-radius: 12px; margin-bottom: 16px; text-align: left;">
+        <img src="icons/icon-192.png" alt="Sudo9ku Logo" style="width: 52px; height: 52px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); object-fit: cover;">
+        <div style="flex: 1;">
+          <div style="font-weight: 700; font-size: 1rem; color: var(--text-color);">Sudo9ku (Android)</div>
+          <div style="font-size: 0.78rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+            <span>⚡ Chạy Offline 100%</span> • <span>📷 Quét Camera Native</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- OS Segment Tabs -->
+      <div style="display: flex; gap: 8px; margin-bottom: 14px; background: rgba(255,255,255,0.05); padding: 4px; border-radius: 10px;">
+        <button type="button" id="modal-tab-ios" class="btn btn-sm" style="flex: 1; border-radius: 8px; font-weight: 600; padding: 8px; background: rgba(56, 189, 248, 0.2); color: var(--accent-cyan); border: none;">
+          🍏 iPhone / iOS
+        </button>
+        <button type="button" id="modal-tab-android" class="btn btn-sm" style="flex: 1; border-radius: 8px; font-weight: 600; padding: 8px; background: transparent; color: var(--text-muted); border: none;">
+          🤖 Android
+        </button>
+      </div>
+
+      <!-- Khu vực nội dung cho iPhone (iOS) -->
+      <div id="modal-content-ios" style="display: block;">
+        <div style="padding: 12px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; text-align: left; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 14px;">
+          <strong style="color: var(--accent-cyan); display: flex; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 0.88rem;">
+            <span>🍏</span> Cài đặt lên iPhone/iPad (Chạy Offline 100%):
+          </strong>
+          <strong>Bước 1:</strong> Mở Camera iPhone quét mã QR bên dưới để mở trong trình duyệt <strong>Safari</strong>.<br>
+          <strong>Bước 2:</strong> Chạm vào nút <strong>Chia sẻ (Share)</strong> ở thanh dưới cùng của Safari (biểu tượng <strong>hình ô vuông có mũi tên lên ⎋</strong>).<br>
+          <strong>Bước 3:</strong> Cuộn xuống và chọn <strong>"Thêm vào MH chính"</strong> (Add to Home Screen ➕), sau đó nhấn <strong>Thêm</strong> ở góc trên.<br>
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.12); color: var(--accent-green); font-size: 0.78rem;">
+            ✓ Biểu tượng <strong>Sudo9ku</strong> sẽ xuất hiện trên màn hình chính iPhone như một App App Store độc lập, mở toàn màn hình và <strong>hoạt động hoàn toàn Offline</strong>!
+          </div>
+        </div>
+      </div>
+
+      <!-- Khu vực nội dung cho Android -->
+      <div id="modal-content-android" style="display: none;">
+        <!-- Nút Tải Trực Tiếp File APK -->
+        <div style="margin-bottom: 14px;">
+          <a href="./Sudo9ku.apk" download="Sudo9ku.apk" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px; font-weight: 700; font-size: 0.96rem; text-decoration: none; border-radius: 10px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 16px rgba(16, 185, 129, 0.4);">
+            <span>📥</span> TẢI FILE APK CHO ANDROID (Sudo9ku.apk)
+          </a>
+          <div style="font-size: 0.76rem; color: var(--accent-green); margin-top: 5px; text-align: center;">
+            ✓ Đã build thành công bằng Gradle 8.5, cài đặt trực tiếp
+          </div>
+        </div>
+
+        <!-- Hướng dẫn cài đặt Android WebAPK -->
+        <div style="padding: 12px; background: rgba(56, 189, 248, 0.07); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; text-align: left; font-size: 0.8rem; color: var(--text-muted); line-height: 1.55; margin-bottom: 14px;">
+          <strong style="color: var(--accent-cyan); display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+            <span>📲</span> Hoặc cài nhanh qua Chrome (WebAPK):
+          </strong>
+          Mở link trên Chrome điện thoại ➔ Bấm <strong>menu 3 chấm (⋮)</strong> ➔ Chọn <strong>"Cài đặt ứng dụng"</strong> (Install App).
+        </div>
+      </div>
+
+      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px;">
+        Quét mã QR bằng Camera điện thoại (iPhone hoặc Android) để mở:
+      </p>
+      
+      <div class="qr-code-box" id="qr-code-box">
+        <img id="qr-image" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://192.168.1.146:3000/" alt="Mã QR kết nối điện thoại">
+      </div>
+
+      <div class="phone-url-box">
+        <code id="phone-url-text">http://192.168.1.146:3000/</code>
+        <button id="btn-copy-phone-url" class="btn btn-primary btn-sm" title="Sao chép đường dẫn">
+          📋 Sao chép
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Sổ Tay Công Thức & Kỹ Thuật Giải Sudoku -->
+  <div id="formula-modal" class="modal-overlay">
+    <div class="modal-content formula-modal-content">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span>📖</span> Sổ Tay Công Thức &amp; Kỹ Thuật Giải Sudoku
+        </h3>
+        <button id="btn-close-formula-modal" class="btn btn-secondary btn-sm">✕</button>
+      </div>
+
+      <p style="font-size: 0.84rem; color: var(--text-muted); margin-top: 4px;">
+        Tra cứu các công thức logic từ cơ bản đến cực khó được sử dụng để đồng bộ và giải các ván Sudoku.com.
+      </p>
+
+      <div id="formula-modal-security-banner" style="display: none; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px 14px; margin: 10px 0 14px 0; font-size: 0.8rem; color: #fca5a5; align-items: center; gap: 8px;">
+        <span style="font-size: 1.1rem;">🔒</span>
+        <div>
+          <strong>Chế độ tự giải đang bật:</strong> Đã tắt xem trước các gợi ý tương lai trong Tùy chỉnh (Chỉ hiển thị các nước cờ bạn đã đi).
+        </div>
+      </div>
+
+      <div class="formula-guide-body" id="formula-guide-body">
+        
+        <!-- 1. Naked Single -->
+        <div class="formula-guide-card" id="guide-naked-single">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>1. Đơn lẻ trần (Naked Single)</span>
+            </div>
+            <span class="diff-badge diff-easy">Cơ bản</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: C(r, c) = {X} ⇒ Điền số X vào ô (r, c)
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Khi xét một ô trống, nếu cả 8 số khác từ 1 đến 9 đã xuất hiện trên cùng Hàng, Cột hoặc Khối 3x3 bao quanh ô đó, thì ô này chỉ còn lại duy nhất một ứng viên X.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Nhìn vào ô trống giao nhau của hàng, cột và khối có nhiều số đã điền nhất.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Liệt kê các số 1-9 đã có trong hàng, cột, khối. Số còn thiếu duy nhất chính là đáp án.</div>
+          </div>
+        </div>
+
+        <!-- 2. Hidden Single -->
+        <div class="formula-guide-card" id="guide-hidden-single">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>2. Đơn lẻ ẩn (Hidden Single)</span>
+            </div>
+            <span class="diff-badge diff-easy">Cơ bản</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: ∃! ô trong Đơn vị U có thể nhận X ⇒ Điền số X vào ô đó
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Một ô có thể chứa nhiều ứng viên nháp khác nhau (nên không phải Naked Single), nhưng xét trên toàn bộ Hàng, Cột hoặc Khối 3x3, số X chỉ có thể đặt vào duy nhất một ô đó.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Chọn một số cụ thể (ví dụ số 7) và dùng mắt quét các đường chặn theo hàng/cột vào một Khối 3x3.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Khi thấy 8 ô trong đơn vị bị chặn hoặc đã điền, ô còn lại bắt buộc phải là số X.</div>
+          </div>
+        </div>
+
+        <!-- 3. Naked Pair -->
+        <div class="formula-guide-card" id="guide-naked-pair">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>3. Cặp đôi trần (Naked Pair)</span>
+            </div>
+            <span class="diff-badge diff-medium">Trung cấp</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: C(A) = C(B) = {X, Y} trong U ⇒ Xóa X, Y khỏi các ô khác trong U
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Nếu trong cùng một Hàng, Cột hoặc Khối 3x3 có đúng 2 ô chỉ chứa đúng 2 ứng viên giống hệt nhau {X, Y}, thì hai số này bắt buộc phải chia nhau 2 ô này. Không ô nào khác trong đơn vị đó được phép nhận X hoặc Y.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Tìm 2 ô có đúng 2 ứng viên giống nhau trong cùng 1 hàng, cột hoặc khối.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Xóa ứng viên X và Y khỏi tất cả các ô còn lại trong đơn vị đó.</div>
+          </div>
+        </div>
+
+        <!-- 4. Hidden Pair -->
+        <div class="formula-guide-card" id="guide-hidden-pair">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>4. Cặp đôi ẩn (Hidden Pair)</span>
+            </div>
+            <span class="diff-badge diff-hard">Nâng cao</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: X và Y chỉ có thể xuất hiện tại 2 ô A và B trong U ⇒ Xóa các ứng viên khác khỏi A và B
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Trong một đơn vị, hai số X và Y chỉ có thể nằm tại đúng 2 ô A và B (dù 2 ô này có thể chứa thêm ứng viên rác khác). Vì X và Y bắt buộc chiếm 2 ô này, mọi ứng viên khác trong 2 ô đó bị loại bỏ hoàn toàn.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Đếm số lần xuất hiện của từng số trong hàng/cột/khối. Nếu thấy 2 số cùng chỉ xuất hiện ở 2 vị trí giống nhau.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Giữ lại {X, Y} và xóa sạch mọi ứng viên khác trong 2 ô đó (chuyển thành Naked Pair).</div>
+          </div>
+        </div>
+
+        <!-- 5. Pointing Line / Column -->
+        <div class="formula-guide-card" id="guide-pointing">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>5. Khóa ứng viên Khối - Hàng/Cột (Pointing)</span>
+            </div>
+            <span class="diff-badge diff-hard">Nâng cao</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: X trong Khối B chỉ nằm trên Hàng R ⇒ Xóa X khỏi phần còn lại của Hàng R
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Bên trong một Khối 3x3, tất cả các vị trí ứng viên của số X đều thẳng hàng trên cùng một Hàng (hoặc Cột). Khi đó, số X của khối này chắc chắn phải nằm trên hàng/cột đó, do đó ta có thể loại bỏ X khỏi các ô khác trên hàng/cột đó bên ngoài khối.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Kiểm tra các ứng viên trong 1 Khối 3x3 xem có số nào chỉ nằm trên 1 đường thẳng (hàng hoặc cột).</div>
+            <div>🛠️ <strong>Thao tác:</strong> Chiếu đường thẳng ra ngoài khối và xóa ứng viên đó trên toàn bộ phần còn lại của hàng/cột.</div>
+          </div>
+        </div>
+
+        <!-- 6. Box-Line Reduction -->
+        <div class="formula-guide-card" id="guide-box-line-reduction">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>6. Loại trừ Khối - Hàng/Cột (Box-Line Reduction / Claiming)</span>
+            </div>
+            <span class="diff-badge diff-hard">Nâng cao</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: X trong Hàng R chỉ nằm trong Khối B ⇒ Xóa X khỏi các hàng khác của Khối B
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Ngược lại với Pointing: Nếu trên một Hàng (hoặc Cột), số X chỉ có thể nằm trong phạm vi của một Khối 3x3 duy nhất, thì số X của hàng đó bắt buộc nằm trong khối này. Ta loại bỏ X khỏi các ô còn lại thuộc khối đó.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Quét một hàng/cột xem các vị trí khả dĩ của số X có cùng thuộc 1 khối 3x3 hay không.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Xóa số X khỏi các ô thuộc 2 hàng (hoặc cột) còn lại trong cùng khối 3x3 đó.</div>
+          </div>
+        </div>
+
+        <!-- 7. X-Wing -->
+        <div class="formula-guide-card" id="guide-x-wing">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>7. Cánh chữ X (X-Wing)</span>
+            </div>
+            <span class="diff-badge diff-extreme">Cực khó (Extreme)</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: X nằm ở đúng 2 cột C1, C2 trên cả 2 hàng R1, R2 ⇒ Xóa X khỏi C1, C2 ở các hàng khác
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Mô hình hình chữ nhật gồm 4 đỉnh. Nếu trên hai Hàng riêng biệt, số X chỉ có thể nằm ở đúng hai Cột giống nhau, thì số X bắt buộc phải nằm chéo nhau ở 2 góc đối diện. Do đó, hai Cột này không thể chứa số X ở bất kỳ hàng nào khác.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Tìm 2 hàng mà mỗi hàng chỉ có đúng 2 ô chứa ứng viên X và hai cột tương ứng thẳng hàng nhau.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Xóa ứng viên X trên toàn bộ 2 cột đó (ngoại trừ 4 đỉnh của hình chữ nhật).</div>
+          </div>
+        </div>
+
+        <!-- 7b. Cánh chữ Y (XY-Wing) -->
+        <div class="formula-guide-card" id="guide-xy-wing">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>7. Cánh chữ Y (XY-Wing / Bivalue Trio)</span>
+            </div>
+            <span class="diff-badge diff-hard">Nâng cao</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Công thức: Trục (X, Y) nhìn thấy 2 cánh (X, Z) và (Y, Z) ⇒ Mọi ô nhìn thấy cả 2 cánh đều không thể chứa Z
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Ba ô chỉ chứa đúng 2 ứng viên. Một ô làm "Trục" (chứa XY) liên kết với hai ô "Cánh" (chứa XZ và YZ). Dù Trục nhận X hay Y thì một trong hai Cánh bắt buộc phải nhận giá trị Z.
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Tìm 3 ô bivalue (chỉ 2 ứng viên) ghép thành bộ (AB, AC, BC) sao cho ô gốc nhìn thấy 2 ô cánh.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Loại bỏ ứng viên chung C khỏi tất cả các ô giao thoa thuộc vùng ảnh hưởng của cả hai cánh.</div>
+          </div>
+        </div>
+
+        <!-- 8. Chứng Minh Bằng Phản Chứng (Proof by Contradiction / Nishio Chains) -->
+        <div class="formula-guide-card" id="guide-branching">
+          <div class="formula-header-row">
+            <div class="formula-title-text">
+              <span>8. Chứng minh bằng phản chứng (Proof by Contradiction / Nishio Chains)</span>
+            </div>
+            <span class="diff-badge diff-extreme">Ác mộng / Cực khó</span>
+          </div>
+          <div class="formula-rule-box">
+            📐 Định lý Phản Chứng: Giả thiết ô (r, c) = v_sai ⇒ Kéo theo chuỗi domino suy diễn bắt buộc ⇒ Xuất hiện mâu thuẫn toán học (ô triệt tiêu 0 ứng viên hoặc trùng lặp) ⇒ Phủ định giả thiết, v_sai bị bác bỏ; ô (r, c) bắt buộc nhận giá trị duy nhất còn lại.
+          </div>
+          <p class="formula-body-text">
+            <strong>Khái niệm:</strong> Áp dụng cho các đề cờ Ác mộng (Everest, Escargot, Arto Inkala, Royle 17-clue, Evil Sudoku) khi toàn bộ các kỹ thuật loại trừ hình học đơn lẻ đã hết nước đi. Thay vì đoán mò, phương pháp Nishio Chains lập chuỗi phản chứng toán học nghiêm ngặt: lần lượt chứng minh mọi phương án khác đều dẫn tới bế tắc logic không thể giải tiếp, từ đó khẳng định duy nhất giá trị chân lý (Q.E.D).
+          </p>
+          <div class="formula-steps-list">
+            <div>🔎 <strong>Cách nhận diện:</strong> Chọn ô có số ứng viên tối thiểu (thường là 2 ứng viên). Thử nghiệm nhánh giả thiết đối nghịch.</div>
+            <div>🛠️ <strong>Thao tác:</strong> Lan truyền các bước đi bắt buộc theo hiệu ứng domino cho đến khi chạm điểm mâu thuẫn (ô cờ bị bế tắc, đánh dấu màu đỏ). Khẳng định giá trị thực của ô mục tiêu.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Xem Hình Ảnh Minh Họa Công Thức (Formula Diagram Modal) -->
+  <div id="formula-diagram-modal" class="modal-overlay">
+    <div class="modal-content formula-diagram-modal-content" style="max-width: 680px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 1.3rem;">🖼️</span>
+          <h3 id="diagram-modal-title" style="margin: 0; font-size: 1.15rem; color: var(--text-main);">
+            Hình Ảnh Minh Họa Công Thức
+          </h3>
+          <span id="diagram-modal-badge" class="diff-badge diff-easy">Cơ bản</span>
+        </div>
+        <button id="btn-close-diagram-modal" class="btn btn-secondary btn-sm" title="Đóng modal hình ảnh">✕</button>
+      </div>
+
+      <!-- Quick Summary -->
+      <div id="diagram-modal-summary" style="background: rgba(65, 179, 163, 0.1); border: 1px solid rgba(65, 179, 163, 0.25); border-radius: 10px; padding: 10px 14px; margin: 10px 0 14px 0; font-size: 0.84rem; color: var(--text-main); line-height: 1.5;">
+        <!-- Tóm tắt được inject tự động -->
+      </div>
+
+      <!-- Large SVG Diagram Container -->
+      <div id="diagram-modal-svg-container" class="diagram-large-view-wrap">
+        <!-- SVG diagram injected here -->
+      </div>
+
+      <!-- Visual Step-by-Step Breakdown -->
+      <div style="margin-top: 14px;">
+        <strong style="font-size: 0.86rem; color: var(--text-main); display: block; margin-bottom: 8px;">
+          📋 Các bước quan sát &amp; giải thích trực quan:
+        </strong>
+        <div id="diagram-modal-steps" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- Steps injected here -->
+        </div>
+      </div>
+
+      <!-- Navigation & Action Footer -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px; border-top: 1px solid var(--card-border); padding-top: 12px; gap: 8px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btn-prev-diagram" class="btn btn-secondary btn-sm">
+            ◀ Công thức trước
+          </button>
+          <button type="button" id="btn-next-diagram" class="btn btn-secondary btn-sm">
+            Công thức tiếp ▶
+          </button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span id="diagram-modal-counter" style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted);">
+            1 / 9
+          </span>
+          <button type="button" onclick="document.getElementById('formula-diagram-modal')?.classList.remove('active', 'show')" class="btn btn-primary btn-sm" style="padding: 7px 18px; font-weight: 700;">
+            ✕ Đóng lại
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Tùy Chỉnh Cài Đặt Hợp Nhất (Unified Settings Modal) -->
+  <div id="unified-settings-modal" class="modal-overlay">
+    <div class="modal-content unified-settings-modal-content" style="max-width: 550px;">
+      <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span>⚙️</span> Tùy Chỉnh Cài Đặt Trò Chơi
+        </h3>
+        <button id="btn-close-unified-settings" class="btn btn-secondary btn-sm">✕</button>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="settings-tabs-nav">
+        <button type="button" class="settings-tab-btn active" data-tab="crosshatch">
+          <span>📐</span> Tia gióng
+        </button>
+        <button type="button" class="settings-tab-btn" data-tab="pencil">
+          <span>✏️</span> Bút chì
+        </button>
+        <button type="button" class="settings-tab-btn" data-tab="mistakes">
+          <span>❌</span> Số lượt lỗi
+        </button>
+        <button type="button" class="settings-tab-btn" data-tab="walkthrough">
+          <span>💡</span> Tiến trình &amp; Hướng dẫn
+        </button>
+      </div>
+
+      <!-- Tab 1: Tia gióng ngang dọc (Cross-Hatching) -->
+      <div id="tab-pane-crosshatch" class="settings-tab-pane active">
+        <div style="background: rgba(65, 179, 163, 0.1); border: 1px solid rgba(65, 179, 163, 0.25); border-radius: 10px; padding: 12px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 6px; color: var(--teal); font-weight: 700; font-size: 0.86rem; margin-bottom: 4px;">
+            <span>💡</span> Kỹ thuật gióng hàng ngang dọc (Cross-Hatching):
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; margin: 0;">
+            Khi bạn nhấp vào một số (ví dụ <strong>số 6</strong>), hệ thống sẽ chiếu các vệt tia gióng ngang (hàng) và dọc (cột) đi qua các ô số 6. Các ô nằm trên vệt gióng này đều bị chặn, giúp bạn nhận diện ngay vị trí duy nhất còn lại có thể điền số 6 trong từng khối 3x3.
+          </p>
+        </div>
+
+        <div style="margin-bottom: 14px;">
+          <strong style="font-size: 0.86rem; color: var(--text-main); display: block; margin-bottom: 8px;">
+            Số lượng số chiếu tia gióng ngang dọc:
+          </strong>
+          <div class="crosshatch-mode-options" style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="mistake-opt-card">
+              <input type="radio" name="crosshatch-mode-type" value="all" checked>
+              <div class="opt-info">
+                <strong>🌟 Tất cả số (Khuyên dùng)</strong>
+                <span>Chiếu tia gióng ngang và dọc qua toàn bộ tất cả các ô có cùng số trên bàn cờ.</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="crosshatch-mode-type" value="3">
+              <div class="opt-info">
+                <strong>3️⃣ 3 số (Ô chọn + 2 số gần nhất)</strong>
+                <span>Chiếu tia gióng qua ô đang chọn và 2 ô cùng số ở gần nhất để tập trung quan sát.</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="crosshatch-mode-type" value="2">
+              <div class="opt-info">
+                <strong>2️⃣ 2 số (Ô chọn + 1 số gần nhất)</strong>
+                <span>Chiếu tia gióng qua ô đang chọn và 1 ô cùng số ở gần nhất.</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="crosshatch-mode-type" value="1">
+              <div class="opt-info">
+                <strong>1️⃣ 1 số (Chỉ ô đang chọn)</strong>
+                <span>Chỉ chiếu tia gióng ngang và dọc qua đúng 1 ô bạn đang chọn.</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="crosshatch-mode-type" value="none">
+              <div class="opt-info">
+                <strong>🚫 Tắt tia gióng ngang dọc</strong>
+                <span>Không chiếu các dải tia ngang dọc, chỉ tô màu cam đào các số cùng giá trị.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+          <label style="background: rgba(232, 168, 124, 0.08); border: 1px solid rgba(232, 168, 124, 0.25); padding: 10px 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div>
+              <strong style="font-size: 0.85rem; color: var(--text-main); display: block;">🎨 Đồng bộ màu sắc chữ số</strong>
+              <span style="font-size: 0.74rem; color: var(--text-muted);">Khi ấn vào số 6, ô đang chọn và tất cả các số 6 khác đều có CÙNG MÀU nổi bật (cam đào)</span>
+            </div>
+            <input type="checkbox" id="toggle-same-digit-color" checked style="width: 18px; height: 18px; accent-color: var(--peach); cursor: pointer;">
+          </label>
+
+          <label style="background: rgba(65, 179, 163, 0.08); border: 1px solid rgba(65, 179, 163, 0.2); padding: 10px 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div>
+              <strong style="font-size: 0.85rem; color: var(--text-main); display: block;">📦 Chiếu sáng khối 3x3</strong>
+              <span style="font-size: 0.74rem; color: var(--text-muted);">Chiếu sáng nhẹ cả khối 3x3 chứa các ô gióng hàng</span>
+            </div>
+            <input type="checkbox" id="toggle-crosshatch-boxes" checked style="width: 18px; height: 18px; accent-color: var(--teal); cursor: pointer;">
+          </label>
+        </div>
+      </div>
+
+      <!-- Tab 2: Bút chì & Ghi chú (Pencil Marks) -->
+      <div id="tab-pane-pencil" class="settings-tab-pane">
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+          Tùy chỉnh cách ghi chú số nháp. Phím tắt <strong>P</strong> hoặc <strong>N</strong> để bật/tắt nhanh bút chì bất cứ lúc nào.
+        </p>
+
+        <div style="margin-bottom: 14px;">
+          <strong style="font-size: 0.86rem; color: var(--text-main); display: block; margin-bottom: 8px;">Chế độ hiển thị ứng viên:</strong>
+          <div class="pencil-mode-options" style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="mistake-opt-card">
+              <input type="radio" name="pencil-mode-type" value="manual" checked>
+              <div class="opt-info">
+                <strong>✏️ Bút chì thủ công (Khuyên dùng)</strong>
+                <span>Tự do thêm/bớt số nháp theo ý bạn bằng các số 1-9 khi bật Bút chì. Không bao giờ bị tính lỗi.</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="pencil-mode-type" value="auto">
+              <div class="opt-info">
+                <strong>🤖 Tự động hiển thị tất cả ứng viên</strong>
+                <span>Hệ thống tự động tính toán và hiển thị tất cả các số khả dĩ hợp lệ trên mọi ô trống của bàn cờ.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; margin-bottom: 14px;">
+          <strong style="font-size: 0.84rem; color: var(--text-main); display: block; margin-bottom: 8px;">⚡ Hành động nhanh toàn bàn cờ:</strong>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" id="btn-auto-fill-notes" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 160px;" title="Điền toàn bộ ứng viên hợp lệ vào các ô trống dưới dạng ghi chú nháp">
+              ✨ Tự động điền tất cả ứng viên
+            </button>
+            <button type="button" id="btn-clear-all-notes" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px;" title="Xóa sạch toàn bộ số nháp đã ghi chú trên tất cả các ô">
+              🧹 Xóa tất cả ghi chú
+            </button>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+          <label style="background: rgba(65, 179, 163, 0.08); border: 1px solid rgba(65, 179, 163, 0.2); padding: 10px 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div>
+              <strong style="font-size: 0.85rem; color: var(--text-main); display: block;">🎯 Tự động xóa ghi chú khi điền số đúng</strong>
+              <span style="font-size: 0.74rem; color: var(--text-muted);">Tự động xóa số đó khỏi ghi chú của các ô cùng hàng, cột và khối 3x3</span>
+            </div>
+            <input type="checkbox" id="toggle-auto-remove-notes" checked style="width: 18px; height: 18px; accent-color: var(--teal); cursor: pointer;">
+          </label>
+
+          <label style="background: rgba(65, 179, 163, 0.08); border: 1px solid rgba(65, 179, 163, 0.2); padding: 10px 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+            <div>
+              <strong style="font-size: 0.85rem; color: var(--text-main); display: block;">💡 Nổi bật ghi chú trùng số đang chọn</strong>
+              <span style="font-size: 0.74rem; color: var(--text-muted);">Làm sáng các số ghi chú trên bàn cờ trùng với ô hoặc số bạn đang chọn</span>
+            </div>
+            <input type="checkbox" id="toggle-highlight-matching-notes" checked style="width: 18px; height: 18px; accent-color: var(--teal); cursor: pointer;">
+          </label>
+        </div>
+      </div>
+
+      <!-- Tab 3: Giới hạn lỗi & Luật chơi (Mistakes) -->
+      <div id="tab-pane-mistakes" class="settings-tab-pane">
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+          Tùy chỉnh số lần điền sai tối đa cho phép trước khi kết thúc ván, hoặc chọn chế độ Không giới hạn:
+        </p>
+
+        <div class="mistake-options-grid" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
+          <label class="mistake-opt-card">
+            <input type="radio" name="mistake-limit" value="3" checked>
+            <div class="opt-info">
+              <strong>🎯 3 lượt sai (Tiêu chuẩn Sudoku)</strong>
+              <span>Quy tắc chuẩn tương tự Sudoku.com, thử thách khả năng tập trung</span>
+            </div>
+          </label>
+
+          <label class="mistake-opt-card">
+            <input type="radio" name="mistake-limit" value="5">
+            <div class="opt-info">
+              <strong>🌿 5 lượt sai (Thư thả)</strong>
+              <span>Nhiều cơ hội hơn để suy ngẫm và thử nghiệm các ô khó</span>
+            </div>
+          </label>
+
+          <label class="mistake-opt-card">
+            <input type="radio" name="mistake-limit" value="10">
+            <div class="opt-info">
+              <strong>🎓 10 lượt sai (Luyện tập)</strong>
+              <span>Thích hợp khi học các kỹ thuật nâng cao hoặc chơi bài Cực khó</span>
+            </div>
+          </label>
+
+          <label class="mistake-opt-card">
+            <input type="radio" name="mistake-limit" value="unlimited">
+            <div class="opt-info">
+              <strong>♾️ Không giới hạn (Tự do tùy ý)</strong>
+              <span>Sai bao nhiêu lần tùy thích, không bao giờ bị Game Over</span>
+            </div>
+          </label>
+
+          <label class="mistake-opt-card custom-opt">
+            <input type="radio" name="mistake-limit" value="custom">
+            <div class="opt-info" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <div>
+                <strong>✏️ Tùy chỉnh theo ý bạn</strong>
+                <span>Tự nhập số lượt sai mong muốn</span>
+              </div>
+              <input type="number" id="input-custom-mistakes" min="1" max="99" value="7" style="width: 70px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(65, 179, 163, 0.4); background: rgba(0,0,0,0.25); color: #fff; text-align: center; font-weight: 700;">
+            </div>
+          </label>
+        </div>
+
+        <div class="instant-feedback-toggle" style="background: rgba(133, 220, 186, 0.1); border: 1px solid rgba(133, 220, 186, 0.25); padding: 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <div>
+            <strong style="font-size: 0.85rem; color: var(--text-main);">🔍 Kiểm tra tức thì theo nghiệm chuẩn</strong>
+            <p style="font-size: 0.74rem; color: var(--text-muted); margin: 0;">Thông báo ngay lập tức số vừa nhập là ĐÚNG hay SAI</p>
+          </div>
+          <input type="checkbox" id="toggle-instant-feedback" checked style="width: 18px; height: 18px; accent-color: var(--teal); cursor: pointer;">
+        </div>
+      </div>
+
+      <!-- Tab 4: Tiến trình bước giải & Sổ tay hướng dẫn (Walkthrough & Guides) -->
+      <div id="tab-pane-walkthrough" class="settings-tab-pane">
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+          Tùy chỉnh tính năng xem trước các bước giải và gợi ý công thức. Bạn có thể giới hạn chỉ xem lại quá khứ để tự thử thách bản thân:
+        </p>
+
+        <div style="background: rgba(65, 179, 163, 0.08); border: 1px solid rgba(65, 179, 163, 0.25); border-radius: 12px; padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;">
+            <div style="flex: 1;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                <strong style="font-size: 0.88rem; color: var(--text-main);">🔮 Cho phép xem trước bước giải tương lai</strong>
+                <span id="forward-steps-status-badge" class="badge" style="background: rgba(16, 185, 129, 0.18); color: #34d399; font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; font-weight: 700;">Đang bật</span>
+              </div>
+              <p style="font-size: 0.76rem; color: var(--text-muted); line-height: 1.5; margin: 0;">
+                • <strong>Bật (Mặc định)</strong>: Thanh tiến trình và Sổ tay công thức hiển thị toàn bộ các bước giải từ hiện tại đến đích (hỗ trợ phân tích, học kỹ thuật nâng cao).<br>
+                • <strong>Tắt (Chỉ xem lại quá khứ)</strong>: Tuyệt đối không cho xem trước đáp án, nước đi gợi ý hay các bước giải sau. Bạn chỉ được phép tua lại các nước cờ bạn đã tự đi trên bàn cờ.
+              </p>
+            </div>
+            <div class="toggle-switch-wrap" style="flex-shrink: 0; margin-top: 2px;">
+              <label class="switch" title="Bật/Tắt xem trước bước giải tương lai">
+                <input type="checkbox" id="toggle-allow-forward-steps" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--card-border); border-radius: 10px; padding: 10px 12px; font-size: 0.76rem; color: var(--text-muted); line-height: 1.4;">
+            <strong style="color: var(--seafoam); display: block; margin-bottom: 2px;">ℹ️ Khi tắt tính năng xem trước:</strong>
+            1. <strong>Thanh tiến trình:</strong> Slider bị chặn ở nước cờ hiện tại của bạn, không thể tua tới các bước tương lai.<br>
+            2. <strong>Sổ tay công thức:</strong> Ẩn toàn bộ mục "Nước đi gợi ý tiếp theo", chỉ hiển thị các nước cờ bạn đã giải thành công.<br>
+            3. <strong>Nút xem trước &amp; đáp án:</strong> Các tính năng xem trước nước tiếp và đáp án bị khóa để bảo toàn tính độc lập của ván chơi.
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; border-top: 1px solid var(--card-border); padding-top: 12px;">
+        <button type="button" id="btn-unified-open-history" class="btn btn-secondary btn-sm" title="Xem lịch sử các bàn cờ gần nhất">
+          📊 Lịch sử lỗi
+        </button>
+        <button type="button" id="btn-save-unified-settings" class="btn btn-primary btn-sm" style="padding: 8px 22px; font-weight: 700;">
+          ✓ Lưu &amp; Áp dụng
+        </button>
+      </div>
+      <!-- Hidden compatibility buttons -->
+      <button id="btn-save-crosshatch-settings" style="position: absolute; top: 0; left: 0px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+      <button id="btn-save-pencil-settings" style="position: absolute; top: 0; left: 10px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+      <button id="btn-save-mistakes-settings" style="position: absolute; top: 0; left: 20px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+      <button id="btn-close-crosshatch-modal" style="position: absolute; top: 0; left: 30px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+      <button id="btn-close-pencil-modal" style="position: absolute; top: 0; left: 40px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+      <button id="btn-close-mistakes-modal" style="position: absolute; top: 0; left: 50px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
+    </div>
+  </div>
+
+  <!-- Compatibility shells for automation / test scripts -->
+  <div id="mistakes-settings-modal" style="display:none;" aria-hidden="true"></div>
+  <div id="pencil-settings-modal" style="display:none;" aria-hidden="true"></div>
+  <div id="crosshatch-settings-modal" style="display:none;" aria-hidden="true"></div>
+
+  <!-- Modal Thống Kê & Lịch Sử Các Bàn Cờ Gần Nhất -->
+  <div id="history-modal" class="modal-overlay">
+    <div class="modal-content history-modal-content" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
+          <span>📊</span> Thống Kê &amp; Lịch Sử Các Bàn Cờ Gần Nhất
+        </h3>
+        <button id="btn-close-history-modal" class="btn btn-secondary btn-sm">✕</button>
+      </div>
+
+      <!-- Top Summary Metrics Cards -->
+      <div class="history-metrics-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0;">
+        <div class="history-metric-card">
+          <span class="metric-icon">🎮</span>
+          <span class="metric-val" id="metric-total-games">0</span>
+          <span class="metric-lbl">Ván gần nhất</span>
+        </div>
+        <div class="history-metric-card">
+          <span class="metric-icon">❌</span>
+          <span class="metric-val" id="metric-total-mistakes">0</span>
+          <span class="metric-lbl">Tổng số lỗi</span>
+        </div>
+        <div class="history-metric-card">
+          <span class="metric-icon">📉</span>
+          <span class="metric-val" id="metric-avg-mistakes">0.0</span>
+          <span class="metric-lbl">Lỗi TB / ván</span>
+        </div>
+        <div class="history-metric-card">
+          <span class="metric-icon">🏆</span>
+          <span class="metric-val" id="metric-flawless-games">0</span>
+          <span class="metric-lbl">Ván 0 lỗi</span>
+        </div>
+      </div>
+
+      <!-- Recent Boards List -->
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+        <strong style="font-size: 0.88rem; color: var(--text-main);">📋 Số lỗi vi phạm trong các bàn gần đây:</strong>
+        <button id="btn-clear-history" class="btn btn-secondary btn-xs" style="font-size: 0.74rem;">🗑️ Xóa lịch sử</button>
+      </div>
+
+      <div class="recent-games-list-wrap" id="recent-games-list" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+        <!-- Sinh tự động qua JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Thông Báo Vượt Giới Hạn Lỗi (Game Over) -->
+  <div id="game-over-modal" class="modal-overlay">
+    <div class="modal-content game-over-modal-content" style="max-width: 420px; text-align: center;">
+      <div style="font-size: 3.2rem; margin-bottom: 8px;">💔</div>
+      <h3 style="color: var(--accent-rose); margin-bottom: 8px; font-size: 1.25rem;">Đã Đạt Giới Hạn Lỗi!</h3>
+      <p id="game-over-msg" style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px;">
+        Bạn đã mắc quá số lần sai cho phép của ván đấu này.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button id="btn-continue-unlimited" class="btn btn-primary" style="padding: 11px; font-weight: 700;">
+          ♾️ Tiếp tục chơi (Không giới hạn lỗi)
+        </button>
+        <button id="btn-restart-current-game" class="btn btn-secondary" style="padding: 10px; font-weight: 600;">
+          🔄 Chơi lại bàn cờ này
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Thiết Lập Đấu Trường Sinh Tồn Extreme -->
+  <div id="extreme-arena-setup-modal" class="modal-overlay">
+    <div class="modal-content arena-setup-modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.6rem;">⚔️</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; color: #f87171;">Đấu Trường Sinh Tồn Extreme</h3>
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Thợ Săn Số 9 • Đồng bộ mã đề & Chống nhìn trộm</span>
+          </div>
+        </div>
+        <button id="btn-close-arena-setup" class="modal-close-btn" title="Đóng">✕</button>
+      </div>
+
+      <div class="arena-setup-body" style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px;">
+        <!-- Input Mã Đề -->
+        <div class="setup-group">
+          <label style="font-size: 0.86rem; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">
+            🔑 Mã đề thi đấu (Seed ID):
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="arena-seed-input" value="1367" class="form-input" style="flex: 1; font-weight: 700; font-size: 1.05rem; letter-spacing: 1px; text-align: center;" placeholder="VD: 1367">
+            <button id="btn-arena-random-seed" class="btn btn-secondary btn-sm" type="button" title="Đổi mã đề ngẫu nhiên">
+              🎲 Ngẫu nhiên
+            </button>
+          </div>
+          <span style="font-size: 0.75rem; color: #38bdf8; display: block; margin-top: 4px;">
+            💡 Hai người cùng nhập một mã đề (VD: 1367) sẽ chơi chung một câu đố Extreme có cùng tỉ lệ thắng và đáp án!
+          </span>
+        </div>
+
+        <!-- Giới Hạn Thời Gian (Cho phép nhập số tùy chỉnh) -->
+        <div class="setup-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-size: 0.86rem; font-weight: 600; color: var(--text-main); margin: 0;">
+              ⏳ Thời gian thi đấu (Phút):
+            </label>
+            <span style="font-size: 0.74rem; color: #94a3b8;">(Nhập 0 = Không giới hạn)</span>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <div style="display: flex; align-items: center; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 2px 10px; width: 130px;">
+              <input type="number" id="arena-timer-custom-input" min="0" max="180" value="10" class="form-input" style="width: 64px; border: none; background: transparent; font-size: 1.05rem; font-weight: 800; text-align: center; color: #34d399; padding: 6px 0;" placeholder="10">
+              <span style="font-size: 0.82rem; color: var(--text-muted); margin-left: 4px;">phút</span>
+            </div>
+            <div class="timer-quick-presets" style="display: flex; gap: 5px; flex: 1; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary btn-xs btn-timer-preset" data-mins="5" style="padding: 6px 9px;">⚡ 5p</button>
+              <button type="button" class="btn btn-secondary btn-xs btn-timer-preset active" data-mins="10" style="padding: 6px 9px;">⏱️ 10p</button>
+              <button type="button" class="btn btn-secondary btn-xs btn-timer-preset" data-mins="15" style="padding: 6px 9px;">🧘 15p</button>
+              <button type="button" class="btn btn-secondary btn-xs btn-timer-preset" data-mins="0" style="padding: 6px 9px;">♾️ Vô hạn</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tùy Chọn Hệ Quy Chiếu Chống Nhìn Trộm -->
+        <div class="setup-group" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 12px;">
+          <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
+            <input type="checkbox" id="arena-transform-chk" checked style="margin-top: 3px; accent-color: #ef4444; width: 16px; height: 16px;">
+            <div>
+              <strong style="font-size: 0.86rem; color: #fca5a5;">🔀 Ngẫu nhiên hệ quy chiếu (Chống nhìn trộm)</strong>
+              <p style="font-size: 0.76rem; color: var(--text-muted); margin: 3px 0 0 0; line-height: 1.4;">
+                Bàn cờ sẽ ngẫu nhiên xoay 90°/180°/270° hoặc lật ngang/dọc khi bắt đầu để chống đối thủ nhìn lén màn hình. Khi trận đấu kết thúc, bàn cờ sẽ tự động hoàn nguyên về góc chuẩn ban đầu để 2 bên đối chiếu nghiệm!
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <!-- Bảng Quy Tắc Sinh Tồn -->
+        <div class="arena-rules-card" style="background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; padding: 10px 12px;">
+          <div style="font-size: 0.8rem; font-weight: 700; color: #f87171; margin-bottom: 6px;">📜 LUẬT CHƠI ĐẤU TRƯỜNG SINH TỒN:</div>
+          <ul style="font-size: 0.76rem; color: var(--text-muted); padding-left: 16px; margin: 0; line-height: 1.5; display: flex; flex-direction: column; gap: 4px;">
+            <li><strong>❤️ 3 Mạng cố định:</strong> Mắc 3 lỗi vi phạm sẽ bị xử thua ngay (Game Over).</li>
+            <li><strong>🎯 Thợ săn 1 số:</strong> Bạn chỉ được điền 1 số duy nhất tại một thời điểm, lấy ngẫu nhiên từ các nước giải được của bàn cờ.</li>
+            <li><strong>💔 Đổi 1 lỗi lấy số:</strong> Chấp nhận nhận thêm 1 lỗi (+1 mạng) để mở khóa thêm 1 số ngẫu nhiên nữa (tối đa giữ 3 số cùng lúc).</li>
+            <li><strong>📡 Radar gợi ý mù:</strong> Tối đa 2 lần/ván. Rọi sáng viền ô mục tiêu mà không tiết lộ số đáp án!</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 18px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button id="btn-cancel-arena-setup" class="btn btn-secondary btn-sm" type="button">Hủy</button>
+        <button id="btn-start-arena-match" class="btn btn-danger btn-sm" type="button" style="background: linear-gradient(135deg, #ef4444, #b91c1c); font-weight: 700; padding: 8px 18px;">
+          ⚔️ Bắt đầu thi đấu
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Tổng Kết Trận Đấu (Showdown / Summary) -->
+  <div id="arena-summary-modal" class="modal-overlay">
+    <div class="modal-content arena-summary-content" style="max-width: 480px; text-align: center;">
+      <div id="arena-summary-banner" style="font-size: 3rem; margin-bottom: 6px;">🏆</div>
+      <h3 id="arena-summary-title" style="font-size: 1.35rem; color: #f87171; margin-bottom: 4px;">KẾT QUẢ SO TÀI</h3>
+      <p id="arena-summary-subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 16px; line-height: 1.4;">
+        Bàn cờ đã được hoàn nguyên về góc chuẩn ban đầu để đối chiếu nghiệm!
+      </p>
+
+      <!-- Thẻ Chỉ Số Trận Đấu -->
+      <div class="summary-stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 18px;">
+        <div class="summary-stat-box" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 6px;">
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">Mã đề</span>
+          <strong id="arena-summary-seed" style="font-size: 1rem; color: #38bdf8;">#1367</strong>
+        </div>
+        <div class="summary-stat-box" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 6px;">
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">Tỉ lệ thắng gốc</span>
+          <strong id="arena-summary-winrate" style="font-size: 1rem; color: #fbbf24;">48.13%</strong>
+        </div>
+        <div class="summary-stat-box" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 6px;">
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">Thời gian</span>
+          <strong id="arena-summary-time" style="font-size: 1rem; color: #34d399;">00:00</strong>
+        </div>
+        <div class="summary-stat-box" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 6px;">
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">Lỗi vi phạm</span>
+          <strong id="arena-summary-mistakes" style="font-size: 1rem; color: #f87171;">0 / 3</strong>
+        </div>
+        <div class="summary-stat-box" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 6px;">
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">Đổi lỗi lấy số</span>
+          <strong id="arena-summary-trades" style="font-size: 1rem; color: #a78bfa;">0 lần</strong>
+        </div>
+        <div class="summary-stat-box" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px 6px;">
+          <span style="font-size: 0.72rem; color: var(--text-muted); display: block;">Radar đã dùng</span>
+          <strong id="arena-summary-radars" style="font-size: 1rem; color: #38bdf8;">0 / 2</strong>
+        </div>
+      </div>
+
+      <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 8px 12px; margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Tiến độ hoàn thành bàn cờ:</span>
+        <strong id="arena-summary-progress" style="font-size: 1.1rem; color: #10b981;">100%</strong>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button id="btn-arena-share-result" class="btn btn-primary" style="padding: 10px; font-weight: 700; background: linear-gradient(135deg, #3b82f6, #1d4ed8);">
+          📋 Sao chép kết quả so tài (Share)
+        </button>
+        <button id="btn-arena-replay-seed" class="btn btn-secondary" style="padding: 9px; font-weight: 600;">
+          🔄 Chơi lại mã đề này
+        </button>
+        <button id="btn-arena-new-match" class="btn btn-secondary" style="padding: 9px; font-weight: 600;">
+          ⚔️ Nhập mã đề thi đấu mới
+        </button>
+        <button id="btn-close-arena-summary" class="btn btn-secondary" style="padding: 8px; font-size: 0.8rem;">
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/app.js?v=11"></script>
+</body>
+</html>

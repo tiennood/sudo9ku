@@ -20,7 +20,11 @@ Thumbs.db
 
 # Local test screenshots & artifacts in root
 *.log
-*.png
+/*.png
+!assets/*.png
+!icons/*.png
+!android/app/src/main/assets/www/assets/*.png
+!android/app/src/main/assets/www/icons/*.png
 *.zip
 *.apk
 *.jar

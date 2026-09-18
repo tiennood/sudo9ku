@@ -292,6 +292,7 @@ class SudokuApp {
       normalTimerCountdownConfig: document.getElementById('normal-timer-countdown-config'),
       normalTimerCustomMinutes: document.getElementById('normal-timer-custom-minutes'),
       btnOpenCustomPuzzle: document.getElementById('btn-open-custom-puzzle'),
+      btnOpenCustomPuzzleAlt: document.getElementById('btn-open-custom-puzzle-alt'),
       customPuzzleModal: document.getElementById('custom-puzzle-modal'),
       btnCloseCustomPuzzle: document.getElementById('btn-close-custom-puzzle'),
       btnCancelCustomPuzzle: document.getElementById('btn-cancel-custom-puzzle'),
@@ -822,6 +823,11 @@ class SudokuApp {
     // Custom Puzzle & Seed Sharing Modal Listeners
     if (this.dom.btnOpenCustomPuzzle) {
       this.dom.btnOpenCustomPuzzle.addEventListener('click', () => {
+        this.openCustomPuzzleModal();
+      });
+    }
+    if (this.dom.btnOpenCustomPuzzleAlt) {
+      this.dom.btnOpenCustomPuzzleAlt.addEventListener('click', () => {
         this.openCustomPuzzleModal();
       });
     }
@@ -4017,6 +4023,7 @@ class SudokuApp {
     this.mistakesCount = 0;
     this.updateMistakeBadge();
     this.startNewGameRecord();
+    this.startNormalTimer();
     this.playSound('step');
     this.setStatus('🔄 Đã khởi động lại ván cờ hiện tại. Lỗi đã được reset về 0!', 'valid');
   }
@@ -4142,6 +4149,10 @@ class SudokuApp {
     this.dom.stepDetailsTitle.textContent = 'Bàn cờ đã được xóa sạch';
     this.dom.stepExplanationText.textContent = 'Bàn cờ đã được làm trống. Hãy tải ảnh lên, bấm [Sudoku.com] hoặc [Ảnh mẫu] để bắt đầu!';
     this.dom.stepMetaChips.innerHTML = '';
+    this.stopNormalTimer();
+    this.normalTimerElapsedSeconds = 0;
+    this.normalTimerRemainingSeconds = this.normalCountdownMinutes * 60;
+    this.updateNormalTimerDisplay();
     this.setStatus('🗑️ Đã xóa sạch toàn bộ bàn cờ', '');
     this.updatePlayerControls();
     this.renderBoard();

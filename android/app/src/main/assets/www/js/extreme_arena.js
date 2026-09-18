@@ -378,6 +378,12 @@ export class ExtremeArenaManager {
     this.advanceActiveNumber(true);
 
     // 5. Cấu hình Timer
+    if (typeof this.app.stopNormalTimer === 'function') {
+      this.app.stopNormalTimer();
+    }
+    if (this.app.dom.normalTimerBadge) {
+      this.app.dom.normalTimerBadge.style.display = 'none';
+    }
     if (this.timerInterval) clearInterval(this.timerInterval);
     if (this.timeLimitMinutes > 0) {
       this.remainingSeconds = this.timeLimitMinutes * 60;
@@ -952,6 +958,10 @@ export class ExtremeArenaManager {
     this.restoreUserSettings();
     this.hideHUD();
     this.resetKeypadLockVisuals();
+    if (this.app.dom.normalTimerBadge && this.app.normalTimerMode !== 'none') {
+      this.app.dom.normalTimerBadge.style.display = 'inline-flex';
+      this.app.startNormalTimer();
+    }
     this.app.setStatus('Đã thoát Đấu Trường Extreme. Bàn cờ trở về chế độ bình thường.', 'valid');
   }
 

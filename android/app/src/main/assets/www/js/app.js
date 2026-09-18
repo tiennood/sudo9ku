@@ -5461,6 +5461,7 @@ class SudokuApp {
     this.currentBoard = SudokuSolver.cloneBoard(puzzle.grid);
     this.originalPuzzleGrid = SudokuSolver.cloneBoard(puzzle.grid);
     this.solution = SudokuSolver.cloneBoard(puzzle.sol);
+    this.officialSolution = SudokuSolver.cloneBoard(puzzle.sol);
 
     this.isOriginalClue = Array.from({ length: 9 }, (_, r) =>
       Array.from({ length: 9 }, (_, c) => puzzle.grid[r][c] !== 0)
@@ -5482,11 +5483,19 @@ class SudokuApp {
     this.activeCustomSeed = seed;
     this.activeCustomDifficulty = diff;
 
+    const clueCount = puzzle.grid.flat().filter(x => x > 0).length;
+    this.solveAndPrepareWalkthrough(clueCount, puzzle.sol);
+
     this.startNewGameRecord(`Đề #${seed} (${diffName})`);
     this.renderBoard();
     this.updateInspector();
     this.syncSolvingWalkthroughWithCurrentBoard();
     this.updateSolutionPreviewLockUI();
+
+    if (this.dom.fetchStatusInfo) {
+      this.dom.fetchStatusInfo.innerHTML = `🎲 Đề <strong>#${seed}</strong> • ${diffName} • ${clueCount} ô`;
+    }
+    this.switchMobileTab('board');
 
     this.playSound('step');
     this.setStatus(`🎮 Đã nạp Đề #${seed} • Cấp độ: ${diffName}! Hãy cùng so tài nào!`, 'valid');

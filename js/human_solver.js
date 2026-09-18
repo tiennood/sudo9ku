@@ -1785,9 +1785,11 @@ export class HumanSolver {
     const chainCells = [{ row: startR, col: startC, type: 'target' }];
     let conflictCell = null;
     let contradictionReason = '';
+    let visitedNodes = 0;
+    const MAX_CONTRADICTION_NODES = 250;
 
     function searchContradiction(b, depth, currentChain) {
-      if (depth > 14) return null;
+      if (depth > 8 || ++visitedNodes > MAX_CONTRADICTION_NODES) return null;
 
       for (let r = 0; r < 9; r++) {
         for (let c = 0; c < 9; c++) {

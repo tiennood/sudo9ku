@@ -230,13 +230,34 @@ export class ImageProcessor {
    * Cắt và xử lý nhận diện toàn bộ 81 ô của bàn cờ Sudoku
    */
   async processSudokuImage(img, onProgress = null, customBounds = null) {
-    const mainCanvas = document.createElement('canvas');
-    mainCanvas.width = img.naturalWidth || img.width;
-    mainCanvas.height = img.naturalHeight || img.height;
-    const ctx = mainCanvas.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0);
+    const natW = img.naturalWidth || img.width;
+    const natH = img.naturalHeight || img.height;
 
-    const bounds = customBounds || ImageProcessor.detectGridBounds(mainCanvas);
+    // Giới hạn kích thước tối đa 1600px để chống tràn RAM và đứng máy trên ảnh 48MP
+    const maxDim = 1600;
+    let scale = 1;
+    let targetW = natW;
+    let targetH = natH;
+    if (Math.max(natW, natH) > maxDim) {
+      scale = maxDim / Math.max(natW, natH);
+      targetW = Math.round(natW * scale);
+      targetH = Math.round(natH * scale);
+    }
+
+    const mainCanvas = document.createElement('canvas');
+    mainCanvas.width = targetW;
+    mainCanvas.height = targetH;
+    const ctx = mainCanvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+
+    const bounds = customBounds
+      ? {
+          x: Math.round(customBounds.x * scale),
+          y: Math.round(customBounds.y * scale),
+          width: Math.round(customBounds.width * scale),
+          height: Math.round(customBounds.height * scale)
+        }
+      : ImageProcessor.detectGridBounds(mainCanvas);
 
     const grid = Array.from({ length: 9 }, () => Array(9).fill(0));
     const confidence = Array.from({ length: 9 }, () => Array(9).fill(0));
@@ -266,8 +287,6 @@ export class ImageProcessor {
         cellCanvas.height = cropH;
         const cCtx = cellCanvas.getContext('2d', { willReadFrequently: true });
         cCtx.drawImage(mainCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-        cellImages[r][c] = cellCanvas.toDataURL('image/png');
 
         // Nhận diện chữ số bằng thuật toán nhận diện đặc trưng hình thái học
         const result = this.recognizer.recognizeCell(cellCanvas);

@@ -100,8 +100,12 @@ export class SudokuSolver {
     }
 
     const b = this.cloneBoard(board);
+    let nodeCount = 0;
+    const MAX_NODES = 40000;
 
     function solveHelper() {
+      if (++nodeCount > MAX_NODES) return false;
+
       let minCandidates = 10;
       let targetRow = -1;
       let targetCol = -1;
@@ -156,8 +160,12 @@ export class SudokuSolver {
 
     const b = this.cloneBoard(board);
     let count = 0;
+    let nodeCount = 0;
+    const MAX_NODES = 40000;
 
     function countHelper() {
+      if (++nodeCount > MAX_NODES) return;
+
       let emptyR = -1;
       let emptyC = -1;
       let minCandidates = 10;

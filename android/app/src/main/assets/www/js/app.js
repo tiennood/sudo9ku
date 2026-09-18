@@ -1689,16 +1689,22 @@ class SudokuApp {
           }
         }
 
-        // Đảm bảo không trùng lặp với các bài vừa chơi gần đây
+        // Đảm bảo không trùng lặp với các bài vừa chơi gần đây (Hơn 700+ đề chuẩn xác thực)
         this.playedPuzzlesHistory = this.playedPuzzlesHistory || new Set();
         let unplayed = list.filter(p => !this.playedPuzzlesHistory.has(String(p.id)));
-        if (unplayed.length === 0) {
+        let p = null;
+        if (unplayed.length > 0) {
+          p = unplayed[Math.floor(Math.random() * unplayed.length)];
+          this.playedPuzzlesHistory.add(String(p.id));
+        } else if (bank && typeof bank.generateInfinitePuzzle === 'function') {
+          // Khi đã hoàn thành toàn bộ kho đề chuẩn, tự động kích hoạt Động cơ sinh đề vô hạn
+          p = bank.generateInfinitePuzzle(selectedLevel);
+        } else {
           this.playedPuzzlesHistory.clear();
           unplayed = list;
+          p = unplayed[Math.floor(Math.random() * unplayed.length)];
+          this.playedPuzzlesHistory.add(String(p.id));
         }
-
-        const p = unplayed[Math.floor(Math.random() * unplayed.length)];
-        this.playedPuzzlesHistory.add(String(p.id));
 
         const parseStr = (s) => {
           const mat = [];

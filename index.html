@@ -36,6 +36,11 @@
       </div>
 
       <div class="header-actions">
+        <a id="btn-github-repo" href="https://github.com/tiennood/sudo9ku" target="_blank" rel="noopener" class="btn btn-secondary btn-icon" title="Xem mã nguồn trên GitHub (tiennood/sudo9ku)" style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: inherit;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+        </a>
         <button id="btn-sample" class="btn btn-primary btn-sm" title="Nạp nhanh ảnh mẫu của bạn">
           <span>⚡</span> Ảnh mẫu
         </button>
@@ -109,6 +114,9 @@
         <div class="fetch-quick-actions" style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
           <button id="btn-open-extreme-arena" class="btn btn-danger btn-sm btn-arena-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #ef4444, #991b1b); color: #fff; box-shadow: 0 0 14px rgba(239, 68, 68, 0.45); cursor: pointer; border: 1px solid rgba(254, 202, 202, 0.3);" title="Mở Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9">
             ⚔️ Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9
+          </button>
+          <button id="btn-open-seed-leaderboard-alt" class="btn btn-warning btn-sm btn-leaderboard-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; box-shadow: 0 0 14px rgba(245, 158, 11, 0.4); cursor: pointer; border: 1px solid rgba(253, 230, 138, 0.3);" title="Xem Bảng Xếp Hạng Seed Khó Nhất Thế Giới & Chọn Chơi Ngay">
+            🏆 Bảng Xếp Hạng Seed Khó Nhất (Everest & 17 Ô)
           </button>
           <button id="btn-nightmare-mode" class="btn btn-nightmare btn-sm" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; background: linear-gradient(135deg, #7f1d1d, #450a0a); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; font-weight: 600; cursor: pointer;" title="Nạp ngay đề Ác mộng khó nhất hành tinh (Tỉ lệ thắng < 5%)">
             ☠️ Thử thách Ác mộng (< 5%)
@@ -233,6 +241,9 @@
           </button>
           <button id="btn-open-custom-puzzle" class="btn btn-primary btn-sm btn-custom-puzzle-glow" style="background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff; font-weight: 700; border: 1px solid rgba(147, 197, 253, 0.3);" title="Tùy chỉnh mã đề &amp; Lấy đề chơi chung cùng bạn bè">
             🎲 Lấy đề chơi chung
+          </button>
+          <button id="btn-open-seed-leaderboard" class="btn btn-warning btn-sm btn-leaderboard-glow" style="background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; font-weight: 700; border: 1px solid rgba(253, 230, 138, 0.3);" title="Mở Bảng Xếp Hạng Seed Khó Nhất Thế Giới &amp; Sudoku.com">
+            🏆 BXH Seed Khó
           </button>
           <button id="btn-quick-fetch-sudoku" class="btn btn-secondary btn-sm" title="Lấy ngay bài Sudoku.com theo cấp độ hiện tại">
             🌐 Sudoku.com
@@ -1242,6 +1253,9 @@
             <button id="btn-arena-random-seed" class="btn btn-secondary btn-sm" type="button" title="Đổi mã đề ngẫu nhiên">
               🎲 Ngẫu nhiên
             </button>
+            <button id="btn-arena-pick-leaderboard-seed" class="btn btn-warning btn-sm" type="button" style="padding: 0 10px; font-weight: 700; background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; border: 1px solid rgba(253, 230, 138, 0.3);" title="Mở BXH để chọn seed khó nhất">
+              🏆 Chọn từ BXH
+            </button>
           </div>
           <span style="font-size: 0.75rem; color: #38bdf8; display: block; margin-top: 4px;">
             💡 Hai người cùng nhập một mã đề (VD: 1367) sẽ chơi chung một câu đố Extreme có cùng tỉ lệ thắng và đáp án!
@@ -1397,9 +1411,14 @@
           <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-main);">
             2. Mã Đề Đồng Bộ (Seed):
           </label>
-          <button type="button" id="btn-custom-seed-random" class="btn btn-secondary btn-xs" style="padding: 3px 8px;">
-            🎲 Ngẫu nhiên mã mới
-          </button>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" id="btn-custom-pick-leaderboard-seed" class="btn btn-warning btn-xs" style="padding: 3px 8px; font-weight: 700; background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; border: 1px solid rgba(253, 230, 138, 0.3);">
+              🏆 Chọn từ BXH
+            </button>
+            <button type="button" id="btn-custom-seed-random" class="btn btn-secondary btn-xs" style="padding: 3px 8px;">
+              🎲 Ngẫu nhiên mã mới
+            </button>
+          </div>
         </div>
         <div style="display: flex; gap: 8px;">
           <input type="text" id="custom-puzzle-seed-input" value="2026" class="form-input" style="flex: 1; font-weight: 800; font-size: 1rem; color: #34d399; letter-spacing: 1px; text-transform: uppercase;" placeholder="Nhập mã đề (VD: 8888, BANBE)">
@@ -1462,6 +1481,71 @@
         </button>
         <button type="button" id="btn-start-custom-puzzle" class="btn btn-primary btn-sm" style="padding: 8px 20px; font-weight: 700; background: linear-gradient(135deg, #0284c7, #2563eb);">
           ▶️ Bắt đầu chơi đề này
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Bảng Xếp Hạng Seed Khó Nhất -->
+  <div id="seed-leaderboard-modal" class="modal-overlay">
+    <div class="modal-content seed-leaderboard-content" style="max-width: 680px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="padding-bottom: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.8rem; filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6));">🏆</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 800; background: linear-gradient(135deg, #fef08a, #f59e0b, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+              BẢNG XẾP HẠNG SEED KHÓ NHẤT
+            </h3>
+            <span style="font-size: 0.76rem; color: var(--text-muted);">
+              Kỷ lục thế giới Arto Inkala, Đề 17 ô Gordon Royle &amp; Top đề Sudoku.com tỉ lệ thắng thấp nhất
+            </span>
+          </div>
+        </div>
+        <button id="btn-close-seed-leaderboard" class="modal-close-btn" title="Đóng">✕</button>
+      </div>
+
+      <!-- Controls: Tabs & Search -->
+      <div class="leaderboard-controls" style="padding: 12px 0 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06);">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
+          <button type="button" class="btn btn-secondary btn-sm btn-seed-tab active" data-tab="all">
+            🌟 Tất cả (Top 25)
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm btn-seed-tab" data-tab="nightmare">
+            💀 Ác Mộng &amp; 17 Ô (&lt; 5%)
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm btn-seed-tab" data-tab="extreme">
+            🔴 Sudoku.com Cực Hiếm (&lt; 30%)
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm btn-seed-tab" data-tab="conquered">
+            🏅 Đã Chinh Phục (<span id="conquered-seeds-count">0</span>)
+          </button>
+        </div>
+
+        <div style="position: relative; width: 100%;">
+          <input type="text" id="seed-search-input" class="form-input" placeholder="🔍 Tìm theo mã Seed, tên đề, tác giả (VD: Everest, 905, 17, Inkala)..." style="width: 100%; font-size: 0.82rem; padding: 7px 12px 7px 32px; border-radius: 8px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12);">
+          <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 0.85rem; color: var(--text-muted); pointer-events: none;">🔍</span>
+          <button id="btn-clear-seed-search" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; display: none; font-size: 0.85rem;">✕</button>
+        </div>
+      </div>
+
+      <!-- Quick Info Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; font-size: 0.74rem; color: var(--text-muted);">
+        <span id="leaderboard-match-summary">Hiển thị 25 câu đố hạt nhân siêu khó</span>
+        <span>💡 Bấm <strong>▶ Chơi ngay</strong> hoặc <strong>⚔️ Đấu trường</strong></span>
+      </div>
+
+      <!-- Scrollable List of Seeds -->
+      <div id="seed-leaderboard-list" class="seed-leaderboard-list custom-scrollbar" style="flex: 1; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 8px; max-height: 52vh;">
+        <!-- Dynamic Leaderboard Items injected by JS -->
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-actions" style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.72rem; color: var(--text-muted);">
+          Thành tích giải đố được tự động lưu vào máy của bạn
+        </span>
+        <button id="btn-close-seed-leaderboard-footer" class="btn btn-secondary btn-sm" type="button">
+          Đóng
         </button>
       </div>
     </div>

@@ -301,7 +301,21 @@ class SudokuApp {
       btnCopyCustomLink: document.getElementById('btn-copy-custom-link'),
       customShareUrlBox: document.getElementById('custom-share-url-box'),
       customLinkCopiedToast: document.getElementById('custom-link-copied-toast'),
-      btnStartCustomPuzzle: document.getElementById('btn-start-custom-puzzle')
+      btnStartCustomPuzzle: document.getElementById('btn-start-custom-puzzle'),
+
+      // Seed Leaderboard (Bảng Xếp Hạng Seed Khó Nhất)
+      btnOpenSeedLeaderboard: document.getElementById('btn-open-seed-leaderboard'),
+      btnOpenSeedLeaderboardAlt: document.getElementById('btn-open-seed-leaderboard-alt'),
+      seedLeaderboardModal: document.getElementById('seed-leaderboard-modal'),
+      btnCloseSeedLeaderboard: document.getElementById('btn-close-seed-leaderboard'),
+      btnCloseSeedLeaderboardFooter: document.getElementById('btn-close-seed-leaderboard-footer'),
+      seedSearchInput: document.getElementById('seed-search-input'),
+      btnClearSeedSearch: document.getElementById('btn-clear-seed-search'),
+      seedLeaderboardList: document.getElementById('seed-leaderboard-list'),
+      btnSeedTabs: document.querySelectorAll('.btn-seed-tab'),
+      btnCustomPickLeaderboardSeed: document.getElementById('btn-custom-pick-leaderboard-seed'),
+      conqueredSeedsCount: document.getElementById('conquered-seeds-count'),
+      leaderboardMatchSummary: document.getElementById('leaderboard-match-summary')
     };
   }
 
@@ -860,6 +874,72 @@ class SudokuApp {
     if (this.dom.customPuzzleSeedInput) {
       this.dom.customPuzzleSeedInput.addEventListener('input', () => {
         this.updateCustomPuzzleShareLink();
+      });
+    }
+
+    // Seed Leaderboard Modal Listeners
+    if (this.dom.btnOpenSeedLeaderboard) {
+      this.dom.btnOpenSeedLeaderboard.addEventListener('click', () => {
+        this.openSeedLeaderboardModal('play');
+      });
+    }
+    if (this.dom.btnOpenSeedLeaderboardAlt) {
+      this.dom.btnOpenSeedLeaderboardAlt.addEventListener('click', () => {
+        this.openSeedLeaderboardModal('play');
+      });
+    }
+    if (this.dom.btnCloseSeedLeaderboard) {
+      this.dom.btnCloseSeedLeaderboard.addEventListener('click', () => {
+        this.closeSeedLeaderboardModal();
+      });
+    }
+    if (this.dom.btnCloseSeedLeaderboardFooter) {
+      this.dom.btnCloseSeedLeaderboardFooter.addEventListener('click', () => {
+        this.closeSeedLeaderboardModal();
+      });
+    }
+    if (this.dom.seedLeaderboardModal) {
+      this.dom.seedLeaderboardModal.addEventListener('click', (e) => {
+        if (e.target === this.dom.seedLeaderboardModal) {
+          this.closeSeedLeaderboardModal();
+        }
+      });
+    }
+    if (this.dom.btnCustomPickLeaderboardSeed) {
+      this.dom.btnCustomPickLeaderboardSeed.addEventListener('click', () => {
+        this.closeCustomPuzzleModal();
+        this.openSeedLeaderboardModal('select-custom');
+      });
+    }
+    if (this.dom.btnSeedTabs) {
+      this.dom.btnSeedTabs.forEach(tabBtn => {
+        tabBtn.addEventListener('click', () => {
+          this.dom.btnSeedTabs.forEach(b => b.classList.remove('active'));
+          tabBtn.classList.add('active');
+          const tab = tabBtn.dataset.tab || 'all';
+          const query = this.dom.seedSearchInput ? this.dom.seedSearchInput.value.trim() : '';
+          this.renderSeedLeaderboard(tab, query);
+        });
+      });
+    }
+    if (this.dom.seedSearchInput) {
+      this.dom.seedSearchInput.addEventListener('input', () => {
+        const query = this.dom.seedSearchInput.value.trim();
+        if (this.dom.btnClearSeedSearch) {
+          this.dom.btnClearSeedSearch.style.display = query ? 'block' : 'none';
+        }
+        const activeTab = document.querySelector('.btn-seed-tab.active')?.dataset.tab || 'all';
+        this.renderSeedLeaderboard(activeTab, query);
+      });
+    }
+    if (this.dom.btnClearSeedSearch) {
+      this.dom.btnClearSeedSearch.addEventListener('click', () => {
+        if (this.dom.seedSearchInput) {
+          this.dom.seedSearchInput.value = '';
+          this.dom.btnClearSeedSearch.style.display = 'none';
+          const activeTab = document.querySelector('.btn-seed-tab.active')?.dataset.tab || 'all';
+          this.renderSeedLeaderboard(activeTab, '');
+        }
       });
     }
     const customDiffBtns = document.querySelectorAll('.btn-custom-diff');
@@ -3901,6 +3981,9 @@ class SudokuApp {
             this.currentGameRecord.duration = finishTime;
             this.saveRecentGames();
           }
+          if (this.activeCustomSeed) {
+            this.recordSeedConquest(this.activeCustomSeed, finishTime, this.mistakesCount);
+          }
         }
       } else {
         // TÍNH LỖI VI PHẠM
@@ -5692,7 +5775,548 @@ class SudokuApp {
 
     return { grid, sol, carvedCount: carveResult.carvedCount, remainingClues: carveResult.remainingClues };
   }
+
+  // =========================================================================
+  // HARDEST SEEDS LEADERBOARD (BẢNG XẾP HẠNG SEED KHÓ NHẤT & CHỌN ĐỀ CHƠI)
+  // =========================================================================
+
+  openSeedLeaderboardModal(targetMode = 'play') {
+    this.seedLeaderboardTargetMode = targetMode;
+    const activeTab = document.querySelector('.btn-seed-tab.active')?.dataset.tab || 'all';
+    const query = this.dom.seedSearchInput ? this.dom.seedSearchInput.value.trim() : '';
+    this.renderSeedLeaderboard(activeTab, query);
+    if (this.dom.seedLeaderboardModal) {
+      this.dom.seedLeaderboardModal.classList.add('active');
+    }
+  }
+
+  closeSeedLeaderboardModal() {
+    if (this.dom.seedLeaderboardModal) {
+      this.dom.seedLeaderboardModal.classList.remove('active');
+    }
+  }
+
+  getConqueredSeeds() {
+    try {
+      const raw = localStorage.getItem('sudo9ku_conquered_seeds');
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  recordSeedConquest(seedId, finishTime = '00:00', mistakes = 0) {
+    if (!seedId) return;
+    try {
+      const conquered = this.getConqueredSeeds();
+      const cleanKey = String(seedId).trim().toLowerCase();
+      conquered[cleanKey] = {
+        seedId: String(seedId),
+        conqueredAt: Date.now(),
+        duration: finishTime,
+        mistakes: mistakes
+      };
+      localStorage.setItem('sudo9ku_conquered_seeds', JSON.stringify(conquered));
+      this.updateConqueredBadgeCount();
+    } catch (e) {
+      console.warn('Không thể lưu thành tích chinh phục seed:', e);
+    }
+  }
+
+  updateConqueredBadgeCount() {
+    if (this.dom.conqueredSeedsCount) {
+      const conquered = this.getConqueredSeeds();
+      const count = Object.keys(conquered).length;
+      this.dom.conqueredSeedsCount.textContent = count;
+    }
+  }
+
+  renderSeedLeaderboard(filterTab = 'all', searchQuery = '') {
+    if (!this.dom.seedLeaderboardList) return;
+
+    this.updateConqueredBadgeCount();
+    const conqueredMap = this.getConqueredSeeds();
+    const cleanQuery = searchQuery.toLowerCase().trim();
+
+    let items = [...HARDEST_SEEDS_COLLECTION];
+
+    // Filter by tab
+    if (filterTab === 'nightmare') {
+      items = items.filter(s => s.cat === 'nightmare');
+    } else if (filterTab === 'extreme') {
+      items = items.filter(s => s.cat === 'extreme' || s.cat === 'evil');
+    } else if (filterTab === 'conquered') {
+      items = items.filter(s => !!conqueredMap[s.id.toLowerCase()]);
+    }
+
+    // Filter by search query
+    if (cleanQuery) {
+      items = items.filter(s => {
+        return (
+          s.id.toLowerCase().includes(cleanQuery) ||
+          (s.name && s.name.toLowerCase().includes(cleanQuery)) ||
+          (s.author && s.author.toLowerCase().includes(cleanQuery)) ||
+          (s.desc && s.desc.toLowerCase().includes(cleanQuery)) ||
+          (s.tags && s.tags.some(t => t.toLowerCase().includes(cleanQuery)))
+        );
+      });
+    }
+
+    if (this.dom.leaderboardMatchSummary) {
+      this.dom.leaderboardMatchSummary.textContent = `Hiển thị ${items.length} / ${HARDEST_SEEDS_COLLECTION.length} đề siêu khó`;
+    }
+
+    if (items.length === 0) {
+      this.dom.seedLeaderboardList.innerHTML = `
+        <div style="text-align: center; padding: 36px 16px; color: var(--text-muted);">
+          <div style="font-size: 2.2rem; margin-bottom: 8px;">🔍</div>
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; color: var(--text-main);">Không tìm thấy câu đố phù hợp</div>
+          <div style="font-size: 0.78rem;">Hãy thử từ khóa khác hoặc chuyển sang tab "Tất cả"</div>
+        </div>
+      `;
+      return;
+    }
+
+    const targetMode = this.seedLeaderboardTargetMode || 'play';
+
+    let html = '';
+    items.forEach((item) => {
+      // Find absolute rank in entire collection
+      const absRank = HARDEST_SEEDS_COLLECTION.findIndex(s => s.id === item.id) + 1;
+      let rankClass = 'rank-other';
+      let rankBadgeHtml = '';
+
+      if (absRank === 1) {
+        rankClass = 'rank-top-1';
+        rankBadgeHtml = `<div class="rank-badge-box gold" title="Hạng 1 - Đề khó nhất hành tinh">🥇<span style="font-size: 0.65rem; font-weight: 800; line-height: 1;">#1</span></div>`;
+      } else if (absRank === 2) {
+        rankClass = 'rank-top-2';
+        rankBadgeHtml = `<div class="rank-badge-box silver" title="Hạng 2">🥈<span style="font-size: 0.65rem; font-weight: 800; line-height: 1;">#2</span></div>`;
+      } else if (absRank === 3) {
+        rankClass = 'rank-top-3';
+        rankBadgeHtml = `<div class="rank-badge-box bronze" title="Hạng 3">🥉<span style="font-size: 0.65rem; font-weight: 800; line-height: 1;">#3</span></div>`;
+      } else {
+        rankBadgeHtml = `<div class="rank-badge-box">#${absRank}</div>`;
+      }
+
+      const isConquered = !!conqueredMap[item.id.toLowerCase()];
+      const conquestInfo = conqueredMap[item.id.toLowerCase()];
+
+      const winRateZoneClass = item.win_rate < 5 ? 'danger-zone' : 'hard-zone';
+      const winRateIcon = item.win_rate < 5 ? '☠️' : '🔥';
+
+      const tagChipsHtml = (item.tags || []).map(t => `<span class="seed-tag-chip">${t}</span>`).join(' ');
+
+      // Action button based on targetMode
+      let actionButtonsHtml = '';
+      if (targetMode === 'select-custom') {
+        actionButtonsHtml = `
+          <button type="button" class="btn btn-primary btn-sm btn-play-free btn-pick-seed" data-seed="${item.id}" data-action="select-custom" style="padding: 7px 12px; font-weight: 700;">
+            🎯 Chọn mã này
+          </button>
+        `;
+      } else if (targetMode === 'select-arena') {
+        actionButtonsHtml = `
+          <button type="button" class="btn btn-danger btn-sm btn-play-arena btn-pick-seed" data-seed="${item.id}" data-action="select-arena" style="padding: 7px 12px; font-weight: 700;">
+            ⚔️ Chọn thi đấu
+          </button>
+        `;
+      } else {
+        actionButtonsHtml = `
+          <button type="button" class="btn btn-primary btn-xs btn-play-free btn-pick-seed" data-seed="${item.id}" data-action="play" title="Chơi tự do với đầy đủ phân tích bước giải & ghi chú">
+            ▶ Chơi ngay
+          </button>
+          <button type="button" class="btn btn-danger btn-xs btn-play-arena btn-pick-seed" data-seed="${item.id}" data-action="arena" title="Khởi động Đấu Trường Sinh Tồn Extreme 3 mạng">
+            ⚔️ Đấu trường
+          </button>
+          <button type="button" class="btn btn-secondary btn-xs btn-seed-copy" data-seed="${item.id}" title="Sao chép mã đề">
+            📋 Copy
+          </button>
+        `;
+      }
+
+      html += `
+        <div class="leaderboard-seed-card ${rankClass} ${isConquered ? 'conquered' : ''}">
+          <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+            ${rankBadgeHtml}
+            <div class="seed-info-col">
+              <div class="seed-title-row">
+                <span class="seed-code-pill">#${item.id}</span>
+                <span class="seed-name-label" title="${item.name}">${item.name}</span>
+                ${isConquered ? `<span class="seed-conquered-badge">✓ Đã chinh phục (${conquestInfo?.duration || 'Thắng'})</span>` : ''}
+              </div>
+              <div class="seed-author-desc">
+                ${item.author ? `<strong>${item.author}</strong> • ` : ''}${item.desc || ''}
+              </div>
+              <div class="seed-metrics-row">
+                <span class="seed-winrate-chip ${winRateZoneClass}" title="Tỉ lệ thắng thực tế đo được từ người chơi">
+                  ${winRateIcon} Thắng: <strong>${item.win_rate}%</strong>
+                </span>
+                <span class="seed-clue-chip">🧩 ${item.clues} ô ban đầu</span>
+                ${tagChipsHtml}
+              </div>
+            </div>
+          </div>
+          <div class="seed-actions-col">
+            ${actionButtonsHtml}
+          </div>
+        </div>
+      `;
+    });
+
+    this.dom.seedLeaderboardList.innerHTML = html;
+
+    // Attach click listeners to cards
+    const pickBtns = this.dom.seedLeaderboardList.querySelectorAll('.btn-pick-seed');
+    pickBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const seedId = btn.dataset.seed;
+        const action = btn.dataset.action || 'play';
+        this.selectSeedFromLeaderboard(seedId, action);
+      });
+    });
+
+    const copyBtns = this.dom.seedLeaderboardList.querySelectorAll('.btn-seed-copy');
+    copyBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const seedId = btn.dataset.seed;
+        this.copySeedToClipboard(seedId);
+      });
+    });
+  }
+
+  selectSeedFromLeaderboard(seedId, actionType = 'play') {
+    const seed = HARDEST_SEEDS_COLLECTION.find(s => s.id.toLowerCase() === String(seedId).toLowerCase());
+    const targetMode = this.seedLeaderboardTargetMode || 'play';
+
+    if (targetMode === 'select-custom' || actionType === 'select-custom') {
+      this.closeSeedLeaderboardModal();
+      if (this.dom.customPuzzleSeedInput) {
+        this.dom.customPuzzleSeedInput.value = seedId;
+      }
+      const diffKey = seed ? (seed.cat === 'nightmare' ? 'nightmare' : (seed.cat === 'evil' ? 'hard' : 'extreme')) : 'extreme';
+      const customDiffBtns = document.querySelectorAll('.btn-custom-diff');
+      customDiffBtns.forEach(btn => {
+        if (btn.dataset.diff === diffKey) {
+          customDiffBtns.forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        }
+      });
+      this.updateCustomPuzzleShareLink();
+      this.openCustomPuzzleModal();
+      this.setStatus(`🎲 Đã chọn Đề #${seedId} (${seed ? seed.name : ''}) vào Tùy Chỉnh!`, 'valid');
+      return;
+    }
+
+    if (targetMode === 'select-arena' || actionType === 'select-arena') {
+      this.closeSeedLeaderboardModal();
+      if (this.arenaManager) {
+        if (this.arenaManager.dom.inputSeed) {
+          this.arenaManager.dom.inputSeed.value = seedId;
+        }
+        this.arenaManager.openSetupModal();
+        this.setStatus(`⚔️ Đã chọn Đề #${seedId} vào Đấu Trường Sinh Tồn!`, 'valid');
+      }
+      return;
+    }
+
+    if (actionType === 'arena') {
+      this.closeSeedLeaderboardModal();
+      if (this.arenaManager) {
+        this.arenaManager.startMatch(seedId, 10, true);
+      }
+      return;
+    }
+
+    // Default: 'play' -> Chế độ tự do
+    this.closeSeedLeaderboardModal();
+    const diff = seed ? (seed.cat === 'nightmare' ? 'nightmare' : 'extreme') : 'extreme';
+    this.loadPuzzleBySeed(seedId, diff, 0, 'countup', 'standard');
+  }
+
+  copySeedToClipboard(seedId) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(seedId).then(() => {
+        this.setStatus(`📋 Đã sao chép mã đề #${seedId} vào bộ nhớ tạm!`, 'valid');
+      }).catch(() => {
+        this.fallbackCopyText(seedId);
+      });
+    } else {
+      this.fallbackCopyText(seedId);
+    }
+  }
+
+  fallbackCopyText(text) {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      this.setStatus(`📋 Đã sao chép mã đề #${text} vào bộ nhớ tạm!`, 'valid');
+    } catch (e) {
+      this.setStatus(`📋 Mã đề: ${text}`, 'info');
+    }
+  }
 }
+
+export const HARDEST_SEEDS_COLLECTION = [
+  {
+    id: "inkala-2012",
+    cat: "nightmare",
+    name: "Everest (Khó nhất thế giới 2012)",
+    author: "TS. Arto Inkala",
+    win_rate: 2.10,
+    clues: 21,
+    tags: ["11★ Khó Nhất TG", "Chuỗi 8 Tầng", "Kỷ Lục Toàn Cầu"],
+    desc: "Tuyệt tác 'Everest' của TS. Arto Inkala (2012). Đạt mức độ khó 11 sao với nhánh suy luận 8 tầng!"
+  },
+  {
+    id: "inkala-2010",
+    cat: "nightmare",
+    name: "Inkala 2010 (Đỉnh cao tư duy)",
+    author: "TS. Arto Inkala",
+    win_rate: 2.45,
+    clues: 21,
+    tags: ["Bẫy Đa Chiều", "Nhánh Suy Luận Sâu"],
+    desc: "Tuyệt tác thách thức giải thuật máy tính của Arto Inkala năm 2010."
+  },
+  {
+    id: "inkala-2006",
+    cat: "nightmare",
+    name: "AI Escargot (Huyền thoại Ốc sên 2006)",
+    author: "TS. Arto Inkala",
+    win_rate: 3.25,
+    clues: 24,
+    tags: ["Chấn Động Thế Giới", "Forcing Chains"],
+    desc: "Câu đố AI Escargot nổi tiếng nhất lịch sử với chuỗi liên kết đối kháng đa tầng."
+  },
+  {
+    id: "royle-17-04",
+    cat: "nightmare",
+    name: "Đề 17 ô Gordon Royle #4",
+    author: "Gordon Royle",
+    win_rate: 3.90,
+    clues: 17,
+    tags: ["17 Ô Tối Giản", "Kỷ Lục Toán Học"],
+    desc: "Chỉ 17 gợi ý ban đầu, tỉ lệ thắng tự nhiên của người chơi chỉ 3.9%!"
+  },
+  {
+    id: "royle-17-02",
+    cat: "nightmare",
+    name: "Đề 17 ô Gordon Royle #2",
+    author: "Gordon Royle",
+    win_rate: 4.12,
+    clues: 17,
+    tags: ["17 Ô Tối Giản", "Phân Bố Rộng"],
+    desc: "Biến thể đối xứng 17 ô với chuỗi đối kháng số 6 và số 7."
+  },
+  {
+    id: "royle-17-05",
+    cat: "nightmare",
+    name: "Đề 17 ô Gordon Royle #5",
+    author: "Gordon Royle",
+    win_rate: 4.20,
+    clues: 17,
+    tags: ["17 Ô Tối Giản", "Forcing Chains"],
+    desc: "Đề 17 ô kinh điển với chuỗi suy luận phức hợp xích Forcing Chain."
+  },
+  {
+    id: "royle-17-03",
+    cat: "nightmare",
+    name: "Đề 17 ô Gordon Royle #3",
+    author: "Gordon Royle",
+    win_rate: 4.30,
+    clues: 17,
+    tags: ["17 Ô Tối Giản", "Cụm Góc Liên Hoàn"],
+    desc: "Cụm góc 17 ô liên hoàn - kỹ thuật ép chuỗi buộc dùng AIC đa tầng."
+  },
+  {
+    id: "royle-17-06",
+    cat: "nightmare",
+    name: "Đề 17 ô Gordon Royle #6",
+    author: "Gordon Royle",
+    win_rate: 4.35,
+    clues: 17,
+    tags: ["17 Ô Tối Giản", "Đối Xứng Bán Phần"],
+    desc: "Cấu trúc 17 ô đối xứng bán phần đặc biệt, tạo ra độ mông lung cực lớn khi giải."
+  },
+  {
+    id: "royle-17-01",
+    cat: "nightmare",
+    name: "Đề 17 ô Gordon Royle #1",
+    author: "Gordon Royle",
+    win_rate: 4.85,
+    clues: 17,
+    tags: ["17 Ô Tối Giản", "Gordon Royle 2007"],
+    desc: "Đạt giới hạn toán học tối thiểu 17 ô. Không thể tồn tại Sudoku 1 nghiệm với 16 ô!"
+  },
+  {
+    id: "905",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #905",
+    author: "Sudoku.com",
+    win_rate: 24.52,
+    clues: 23,
+    tags: ["Top 1 Sudoku.com", "Nishio Chains"],
+    desc: "Đề có tỉ lệ thắng người chơi thấp nhất từng ghi nhận trên toàn bộ hệ thống Sudoku.com."
+  },
+  {
+    id: "5",
+    cat: "evil",
+    name: "Sudoku.com Evil #5",
+    author: "Sudoku.com",
+    win_rate: 25.77,
+    clues: 25,
+    tags: ["Top Độc Địa Evil", "Swordfish"],
+    desc: "Cấp độ Evil với thế cờ khóa chéo 3 hàng 3 cột cực kỳ hiểm hóc."
+  },
+  {
+    id: "705",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #705",
+    author: "Sudoku.com",
+    win_rate: 25.79,
+    clues: 23,
+    tags: ["Cực Khó #705", "X-Chain"],
+    desc: "Chuỗi liên kết ứng viên rời rạc đòi hỏi kỹ thuật X-Chain kéo dài."
+  },
+  {
+    id: "739",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #739",
+    author: "Sudoku.com",
+    win_rate: 26.43,
+    clues: 23,
+    tags: ["Cực Gắt", "Pointing Pairs"],
+    desc: "Cấu trúc giam số ở 4 góc khiến việc tìm ô bắt đầu trở thành ác mộng."
+  },
+  {
+    id: "500",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #500",
+    author: "Sudoku.com",
+    win_rate: 26.50,
+    clues: 23,
+    tags: ["Cột Mốc #500", "Hidden Pair"],
+    desc: "Đề hạt nhân cột mốc 500 với bẫy cặp ẩn kép lồng nhau."
+  },
+  {
+    id: "146",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #146",
+    author: "Sudoku.com",
+    win_rate: 26.51,
+    clues: 23,
+    tags: ["Siêu Hiểm", "XY-Wing"],
+    desc: "Đòi hỏi xác định chính xác cánh XY-Wing phân nhánh để mở nút thắt trung tâm."
+  },
+  {
+    id: "312",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #312",
+    author: "Sudoku.com",
+    win_rate: 26.62,
+    clues: 23,
+    tags: ["Hiếm Thấy", "Box-Line"],
+    desc: "Các ô trống tập trung ở dải ngang giữa khiến suy luận tuyến tính bị vô hiệu."
+  },
+  {
+    id: "812",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #812",
+    author: "Sudoku.com",
+    win_rate: 26.86,
+    clues: 28,
+    tags: ["Bẫy Dày Ô", "Remote Pairs"],
+    desc: "Dù có tới 28 gợi ý nhưng sự ngụy trang ứng viên khiến tỉ lệ thắng rớt xuống dưới 27%."
+  },
+  {
+    id: "396",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #396",
+    author: "Sudoku.com",
+    win_rate: 26.91,
+    clues: 22,
+    tags: ["22 Ô Thưa Thớt", "Naked Quad"],
+    desc: "Chỉ 22 ô cho trước, tạo khoảng trống mênh mông đòi hỏi bộ 4 trần trụi."
+  },
+  {
+    id: "417",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #417",
+    author: "Sudoku.com",
+    win_rate: 26.99,
+    clues: 23,
+    tags: ["Bào Não", "Skyscraper"],
+    desc: "Thế cờ Nhà Chọc Trời (Skyscraper) đôi song hành cực kỳ khó phát hiện."
+  },
+  {
+    id: "411",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #411",
+    author: "Sudoku.com",
+    win_rate: 27.39,
+    clues: 23,
+    tags: ["Cực Khó #411", "Two-String Kite"],
+    desc: "Mô hình Diều Hai Dây (Two-String Kite) liên kết giữa khối 1 và khối 9."
+  },
+  {
+    id: "150",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #150",
+    author: "Sudoku.com",
+    win_rate: 27.51,
+    clues: 23,
+    tags: ["Đột Phá", "Unique Rectangle"],
+    desc: "Tránh bẫy hình chữ nhật vô nghiệm (UR Type 1 & 2) để loại bỏ ứng viên."
+  },
+  {
+    id: "367",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #367",
+    author: "Sudoku.com",
+    win_rate: 27.61,
+    clues: 23,
+    tags: ["Xương Cá", "Fin Swordfish"],
+    desc: "Kiếm Ngư Có Vây (Finned Swordfish) hiếm gặp trên hàng 2, 5, 8."
+  },
+  {
+    id: "372",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #372",
+    author: "Sudoku.com",
+    win_rate: 27.66,
+    clues: 23,
+    tags: ["W-Wing", "Chuỗi Đơn Lẻ"],
+    desc: "Phối hợp W-Wing mạnh mẽ loại bỏ các ứng viên giả mạo trong khối giữa."
+  },
+  {
+    id: "977",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #977",
+    author: "Sudoku.com",
+    win_rate: 27.88,
+    clues: 23,
+    tags: ["Bất Khả Thi", "XYZ-Wing"],
+    desc: "Biến thể XYZ-Wing 3 chiều với ô bản lề tại trung tâm bàn cờ."
+  },
+  {
+    id: "1020",
+    cat: "extreme",
+    name: "Sudoku.com Extreme #1020",
+    author: "Sudoku.com",
+    win_rate: 28.01,
+    clues: 22,
+    tags: ["22 Ô Cực Khó", "Simple Coloring"],
+    desc: "Tô màu đơn giản liên kết mạnh/yếu để tìm mâu thuẫn trong bảng cờ."
+  }
+];
 
 window.addEventListener('DOMContentLoaded', () => {
   window.app = new SudokuApp();

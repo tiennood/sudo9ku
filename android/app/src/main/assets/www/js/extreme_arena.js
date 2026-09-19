@@ -104,6 +104,7 @@ export class ExtremeArenaManager {
       btnStartMatch: document.getElementById('btn-start-arena-match'),
       inputSeed: document.getElementById('arena-seed-input'),
       btnRandomSeed: document.getElementById('btn-arena-random-seed'),
+      btnPickLeaderboardSeed: document.getElementById('btn-arena-pick-leaderboard-seed'),
       inputTimer: document.getElementById('arena-timer-custom-input'),
       timerPresets: document.querySelectorAll('.btn-timer-preset'),
       chkTransform: document.getElementById('arena-transform-chk'),
@@ -155,6 +156,14 @@ export class ExtremeArenaManager {
       this.dom.btnRandomSeed.addEventListener('click', () => {
         const rand = Math.floor(1000 + Math.random() * 9000);
         if (this.dom.inputSeed) this.dom.inputSeed.value = rand;
+      });
+    }
+    if (this.dom.btnPickLeaderboardSeed) {
+      this.dom.btnPickLeaderboardSeed.addEventListener('click', () => {
+        this.closeSetupModal();
+        if (typeof this.app.openSeedLeaderboardModal === 'function') {
+          this.app.openSeedLeaderboardModal('select-arena');
+        }
       });
     }
     if (this.dom.btnStartMatch) {
@@ -828,6 +837,10 @@ export class ExtremeArenaManager {
     }
 
     this.populateSummaryData(true);
+    if (typeof this.app.recordSeedConquest === 'function') {
+      const finishTime = this.dom.summaryTime ? this.dom.summaryTime.textContent : '00:00';
+      this.app.recordSeedConquest(this.seedId, finishTime, this.mistakes);
+    }
     if (this.dom.modalSummary) this.dom.modalSummary.classList.add('active');
   }
 
@@ -1069,6 +1082,33 @@ export class ExtremeArenaManager {
    * Tạo đề fallback ngoại tuyến nếu máy offline
    */
   generateFallbackSeedPuzzle(seedNum) {
+    const bank = (typeof window !== 'undefined' && window.SUDOKU_PUZZLE_BANK) ? window.SUDOKU_PUZZLE_BANK : null;
+    const cleanSeed = String(seedNum).trim().toUpperCase();
+    if (bank) {
+      let exactMatch = null;
+      for (const cat of ['nightmare', 'extreme', 'evil']) {
+        if (Array.isArray(bank[cat])) {
+          exactMatch = bank[cat].find(p => String(p.id).toUpperCase() === cleanSeed);
+          if (exactMatch) break;
+        }
+      }
+      if (exactMatch) {
+        const baseGrid = [];
+        const baseSol = [];
+        for (let r = 0; r < 9; r++) {
+          baseGrid.push(exactMatch.mission.slice(r * 9, (r + 1) * 9).split('').map(Number));
+          baseSol.push(exactMatch.solution.slice(r * 9, (r + 1) * 9).split('').map(Number));
+        }
+        return {
+          success: true,
+          id: String(exactMatch.id),
+          winRate: exactMatch.win_rate || 25,
+          grid: baseGrid,
+          solution: baseSol
+        };
+      }
+    }
+
     let s = (Math.abs(parseInt(seedNum, 10)) || 1367) % 2147483647;
     const rnd = () => {
       s = (s * 16807) % 2147483647;

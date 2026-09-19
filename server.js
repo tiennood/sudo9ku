@@ -520,6 +520,54 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const cleanId = String(seedId).toLowerCase();
+    const nightmareMatch = NIGHTMARE_PUZZLES.find(p => String(p.id).toLowerCase() === cleanId);
+    if (nightmareMatch) {
+      const resp = {
+        success: true,
+        id: nightmareMatch.id,
+        name: nightmareMatch.name,
+        author: nightmareMatch.author,
+        level: 'nightmare',
+        winRate: nightmareMatch.win_rate,
+        grid: stringToMatrix(nightmareMatch.mission),
+        solution: stringToMatrix(nightmareMatch.solution),
+        mission: nightmareMatch.mission,
+        solutionStr: nightmareMatch.solution,
+        source: 'nightmare_vault'
+      };
+      PUZZLE_SEED_CACHE.set(String(seedId), resp);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(resp));
+      return;
+    }
+
+    if (SUDOKU_PUZZLE_BANK) {
+      for (const cat of ['nightmare', 'extreme', 'evil']) {
+        if (Array.isArray(SUDOKU_PUZZLE_BANK[cat])) {
+          const match = SUDOKU_PUZZLE_BANK[cat].find(p => String(p.id).toLowerCase() === cleanId);
+          if (match) {
+            const resp = {
+              success: true,
+              id: String(match.id),
+              name: match.name || `Sudoku.com #${match.id}`,
+              level: cat,
+              winRate: match.win_rate || 25,
+              grid: stringToMatrix(match.mission),
+              solution: stringToMatrix(match.solution),
+              mission: match.mission,
+              solutionStr: match.solution,
+              source: 'bank_' + cat
+            };
+            PUZZLE_SEED_CACHE.set(String(seedId), resp);
+            res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+            res.end(JSON.stringify(resp));
+            return;
+          }
+        }
+      }
+    }
+
     const generated = getDeterministicExtremePuzzle(seedId);
     PUZZLE_SEED_CACHE.set(String(seedId), generated);
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });

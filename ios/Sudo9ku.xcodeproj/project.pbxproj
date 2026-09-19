@@ -1,0 +1,278 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 54;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		1D3623260D0F680D0044F24D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D3623250D0F680D0044F24D /* AppDelegate.swift */; };
+		1D3623280D0F680D0044F24D /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D3623270D0F680D0044F24D /* SceneDelegate.swift */; };
+		1D36232A0D0F680D0044F24D /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D3623290D0F680D0044F24D /* ViewController.swift */; };
+		1D36232C0D0F680D0044F24D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1D36232B0D0F680D0044F24D /* Assets.xcassets */; };
+		1D36232E0D0F680D0044F24D /* www in Resources */ = {isa = PBXBuildFile; fileRef = 1D36232D0D0F680D0044F24D /* www */; };
+		1D3623300D0F680D0044F24D /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D36232F0D0F680D0044F24D /* WebKit.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1D3623220D0F680D0044F24D /* Sudo9ku.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sudo9ku.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1D3623250D0F680D0044F24D /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		1D3623270D0F680D0044F24D /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		1D3623290D0F680D0044F24D /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		1D36232B0D0F680D0044F24D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1D36232D0D0F680D0044F24D /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; path = www; sourceTree = "<group>"; };
+		1D36232F0D0F680D0044F24D /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		1D3623310D0F680D0044F24D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1D36231F0D0F680D0044F24D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D3623300D0F680D0044F24D /* WebKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		1D3623190D0F680D0044F24D = {
+			isa = PBXGroup;
+			children = (
+				1D3623240D0F680D0044F24D /* Sudo9ku */,
+				1D3623230D0F680D0044F24D /* Products */,
+				1D3623320D0F680D0044F24D /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		1D3623230D0F680D0044F24D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1D3623220D0F680D0044F24D /* Sudo9ku.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1D3623240D0F680D0044F24D /* Sudo9ku */ = {
+			isa = PBXGroup;
+			children = (
+				1D3623250D0F680D0044F24D /* AppDelegate.swift */,
+				1D3623270D0F680D0044F24D /* SceneDelegate.swift */,
+				1D3623290D0F680D0044F24D /* ViewController.swift */,
+				1D36232B0D0F680D0044F24D /* Assets.xcassets */,
+				1D36232D0D0F680D0044F24D /* www */,
+				1D3623310D0F680D0044F24D /* Info.plist */,
+			);
+			path = Sudo9ku;
+			sourceTree = "<group>";
+		};
+		1D3623320D0F680D0044F24D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1D36232F0D0F680D0044F24D /* WebKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1D3623210D0F680D0044F24D /* Sudo9ku */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1D3623350D0F680D0044F24D /* Build configuration list for PBXNativeTarget "Sudo9ku" */;
+			buildPhases = (
+				1D36231E0D0F680D0044F24D /* Sources */,
+				1D36231F0D0F680D0044F24D /* Frameworks */,
+				1D3623200D0F680D0044F24D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Sudo9ku;
+			productName = Sudo9ku;
+			productReference = 1D3623220D0F680D0044F24D /* Sudo9ku.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1D36231A0D0F680D0044F24D /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					1D3623210D0F680D0044F24D = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 1D36231D0D0F680D0044F24D /* Build configuration list for PBXProject "Sudo9ku" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = vi;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				vi,
+				en,
+				Base,
+			);
+			mainGroup = 1D3623190D0F680D0044F24D;
+			productRefGroup = 1D3623230D0F680D0044F24D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1D3623210D0F680D0044F24D /* Sudo9ku */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		1D3623200D0F680D0044F24D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D36232C0D0F680D0044F24D /* Assets.xcassets in Resources */,
+				1D36232E0D0F680D0044F24D /* www in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1D36231E0D0F680D0044F24D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1D3623260D0F680D0044F24D /* AppDelegate.swift in Sources */,
+				1D3623280D0F680D0044F24D /* SceneDelegate.swift in Sources */,
+				1D36232A0D0F680D0044F24D /* ViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1D3623330D0F680D0044F24D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		1D3623340D0F680D0044F24D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_OPTIMIZATION_LEVEL = s;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		1D3623360D0F680D0044F24D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sudo9ku/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tiennood.sudo9ku;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1D3623370D0F680D0044F24D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Sudo9ku/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tiennood.sudo9ku;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1D36231D0D0F680D0044F24D /* Build configuration list for PBXProject "Sudo9ku" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D3623330D0F680D0044F24D /* Debug */,
+				1D3623340D0F680D0044F24D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1D3623350D0F680D0044F24D /* Build configuration list for PBXNativeTarget "Sudo9ku" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1D3623360D0F680D0044F24D /* Debug */,
+				1D3623370D0F680D0044F24D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1D36231A0D0F680D0044F24D /* Project object */;
+}

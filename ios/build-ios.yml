@@ -1,0 +1,71 @@
+name: Build iOS App & IPA
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'ios/**'
+      - 'css/**'
+      - 'js/**'
+      - 'index.html'
+      - '.github/workflows/build-ios.yml'
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build Sudo9ku iOS IPA
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode Version
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Sync latest Web assets to iOS bundle
+        run: |
+          mkdir -p ios/Sudo9ku/www
+          cp -r index.html ios/Sudo9ku/www/
+          cp -r css ios/Sudo9ku/www/
+          cp -r js ios/Sudo9ku/www/
+          cp -r icons ios/Sudo9ku/www/
+          cp -r assets ios/Sudo9ku/www/
+          cp -r docs ios/Sudo9ku/www/
+          cp -r manifest.json ios/Sudo9ku/www/
+          cp -r sw.js ios/Sudo9ku/www/
+          echo "Web assets synced successfully."
+
+      - name: Build Archive without Code Signing
+        run: |
+          xcodebuild -project ios/Sudo9ku.xcodeproj \
+            -scheme Sudo9ku \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/Sudo9ku.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Package IPA for Sideloading (AltStore / Sideloadly / TrollStore)
+        run: |
+          mkdir -p build/Payload
+          cp -r build/Sudo9ku.xcarchive/Products/Applications/Sudo9ku.app build/Payload/
+          cd build && zip -qr Sudo9ku.ipa Payload/
+          ls -la Sudo9ku.ipa
+
+      - name: Upload Sudo9ku.ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sudo9ku-iOS-IPA
+          path: build/Sudo9ku.ipa
+          retention-days: 30
+
+      - name: Upload Sudo9ku.app Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sudo9ku-iOS-AppBundle
+          path: build/Sudo9ku.xcarchive/Products/Applications/Sudo9ku.app
+          retention-days: 30

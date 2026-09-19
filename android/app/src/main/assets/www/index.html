@@ -20,7 +20,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=19">
 </head>
 <body>
 
@@ -36,6 +36,19 @@
       </div>
 
       <div class="header-actions">
+        <!-- Nút bật/tắt hiển thị bảng để giảm tải giao diện -->
+        <div class="header-view-toggles" id="header-view-toggles">
+          <button id="btn-toggle-left-panel" class="btn btn-secondary btn-sm btn-sidebar-toggle active" title="Ẩn/Hiện bảng Nhận diện ảnh bên trái">
+            <span>📷</span> <span class="hide-mobile">Quét ảnh</span>
+          </button>
+          <button id="btn-toggle-right-panel" class="btn btn-secondary btn-sm btn-sidebar-toggle active" title="Ẩn/Hiện bảng Lời giải bên phải">
+            <span>💡</span> <span class="hide-mobile">Lời giải</span>
+          </button>
+          <button id="btn-zen-mode" class="btn btn-secondary btn-sm btn-zen-toggle active" title="Chế độ tập trung Zen (Chỉ hiện Bàn cờ trung tâm)">
+            <span>🎯</span> <span class="hide-mobile">Tập trung</span>
+          </button>
+        </div>
+
         <a id="btn-github-repo" href="https://github.com/tiennood/sudo9ku" target="_blank" rel="noopener" class="btn btn-secondary btn-icon" title="Xem mã nguồn trên GitHub (tiennood/sudo9ku)" style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none; color: inherit;">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
@@ -70,15 +83,16 @@
     </button>
   </nav>
 
-  <!-- Main 3-Column Content Layout -->
-  <main class="main-wrapper">
+  <!-- Main 3-Column Content Layout (Zen Mode Mặc định) -->
+  <main class="main-wrapper zen-mode">
 
     <!-- Column 1: Image Input & OCR Panel -->
     <section id="panel-scanner" class="glass-panel input-panel mobile-panel-scanner">
-      <div class="panel-header">
+      <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between;">
         <h2 class="panel-title">
           <span class="panel-title-icon">📷</span> Nhận Diện Từ Ảnh
         </h2>
+        <button id="btn-collapse-left-panel" class="btn-panel-collapse" type="button" title="Thu gọn bảng Nhận diện ảnh">◀</button>
       </div>
 
       <!-- Mobile Quick Camera Button (chỉ hiện trên màn hình điện thoại) -->
@@ -111,23 +125,28 @@
             ⚡ Lấy đề mới
           </button>
         </div>
-        <div class="fetch-quick-actions" style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;">
-          <button id="btn-open-extreme-arena" class="btn btn-danger btn-sm btn-arena-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #ef4444, #991b1b); color: #fff; box-shadow: 0 0 14px rgba(239, 68, 68, 0.45); cursor: pointer; border: 1px solid rgba(254, 202, 202, 0.3);" title="Mở Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9">
-            ⚔️ Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9
-          </button>
-          <button id="btn-open-seed-leaderboard-alt" class="btn btn-warning btn-sm btn-leaderboard-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; box-shadow: 0 0 14px rgba(245, 158, 11, 0.4); cursor: pointer; border: 1px solid rgba(253, 230, 138, 0.3);" title="Xem Bảng Xếp Hạng Seed Khó Nhất Thế Giới & Chọn Chơi Ngay">
-            🏆 Bảng Xếp Hạng Seed Khó Nhất (Everest & 17 Ô)
-          </button>
-          <button id="btn-nightmare-mode" class="btn btn-nightmare btn-sm" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; background: linear-gradient(135deg, #7f1d1d, #450a0a); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; font-weight: 600; cursor: pointer;" title="Nạp ngay đề Ác mộng khó nhất hành tinh (Tỉ lệ thắng < 5%)">
-            ☠️ Thử thách Ác mộng (< 5%)
-          </button>
-          <button id="btn-hunt-low-rate" class="btn btn-secondary btn-sm" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; border-radius: 6px; font-weight: 500;" title="Săn các câu đố cực hiếm có tỉ lệ thắng < 25% trên Sudoku.com">
-            🎯 Săn đề < 25%
-          </button>
-          <button id="btn-open-custom-puzzle-alt" class="btn btn-primary btn-sm btn-custom-puzzle-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff; cursor: pointer; border: 1px solid rgba(147, 197, 253, 0.3); margin-top: 2px;" title="Tùy chỉnh mã đề & Lấy đề chơi chung cùng bạn bè">
-            🎲 Lấy đề chơi chung (Theo mã Seed)
-          </button>
-        </div>
+        
+        <!-- Accordion thu gọn các chế độ thử thách ít dùng để tránh chiếm diện tích -->
+        <details class="fetch-quick-accordion">
+          <summary class="fetch-quick-summary">🔥 Chế độ nâng cao &amp; Thử thách ▾</summary>
+          <div class="fetch-quick-actions" style="display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;">
+            <button id="btn-open-extreme-arena" class="btn btn-danger btn-sm btn-arena-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #ef4444, #991b1b); color: #fff; box-shadow: 0 0 14px rgba(239, 68, 68, 0.45); cursor: pointer; border: 1px solid rgba(254, 202, 202, 0.3);" title="Mở Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9">
+              ⚔️ Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9
+            </button>
+            <button id="btn-open-seed-leaderboard-alt" class="btn btn-warning btn-sm btn-leaderboard-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; box-shadow: 0 0 14px rgba(245, 158, 11, 0.4); cursor: pointer; border: 1px solid rgba(253, 230, 138, 0.3);" title="Xem Bảng Xếp Hạng Seed Khó Nhất Thế Giới & Chọn Chơi Ngay">
+              🏆 Bảng Xếp Hạng Seed Khó Nhất (Everest & 17 Ô)
+            </button>
+            <button id="btn-nightmare-mode" class="btn btn-nightmare btn-sm" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; background: linear-gradient(135deg, #7f1d1d, #450a0a); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 6px; font-weight: 600; cursor: pointer;" title="Nạp ngay đề Ác mộng khó nhất hành tinh (Tỉ lệ thắng < 5%)">
+              ☠️ Thử thách Ác mộng (< 5%)
+            </button>
+            <button id="btn-hunt-low-rate" class="btn btn-secondary btn-sm" style="flex: 1; padding: 6px 10px; font-size: 0.8rem; border-radius: 6px; font-weight: 500;" title="Săn các câu đố cực hiếm có tỉ lệ thắng < 25% trên Sudoku.com">
+              🎯 Săn đề < 25%
+            </button>
+            <button id="btn-open-custom-puzzle-alt" class="btn btn-primary btn-sm btn-custom-puzzle-glow" style="width: 100%; padding: 7px 10px; font-size: 0.84rem; border-radius: 6px; font-weight: 700; background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff; cursor: pointer; border: 1px solid rgba(147, 197, 253, 0.3); margin-top: 2px;" title="Tùy chỉnh mã đề & Lấy đề chơi chung cùng bạn bè">
+              🎲 Lấy đề chơi chung (Theo mã Seed)
+            </button>
+          </div>
+        </details>
         <div class="fetch-info-bar">
           <span id="fetch-status-info">Đề bài: Cực khó (Mặc định)</span>
           <a id="link-sudoku-web" href="https://sudoku.com/vi/extreme/" target="_blank" rel="noopener" class="fetch-external-link" title="Mở trên trang Sudoku.com">
@@ -227,7 +246,7 @@
             <div id="mistakes-badge" class="mistakes-badge info-only" title="Số lỗi vi phạm hiện tại">
               <span class="mistake-icon">❌</span>
               <span class="mistake-label">Lỗi:</span>
-              <strong id="mistake-counter-text" class="mistake-count">0 / 10</strong>
+              <strong id="mistake-counter-text" class="mistake-count">0 / ∞</strong>
             </div>
             <button id="btn-open-history" class="btn btn-secondary btn-xs btn-history-stats" style="display: none !important;" aria-hidden="true" title="Lịch sử lỗi">
               📊 Lịch sử lỗi
@@ -235,34 +254,72 @@
           </div>
         </div>
 
-        <div class="board-tools">
-          <button id="btn-open-extreme-arena-alt" class="btn btn-danger btn-sm btn-arena-glow" style="background: linear-gradient(135deg, #ef4444, #b91c1c); color: #fff; font-weight: 700; border: 1px solid rgba(254, 202, 202, 0.3);" title="Mở Đấu Trường Sinh Tồn Extreme: Thợ Săn Số 9">
-            ⚔️ Đấu trường Extreme
-          </button>
-          <button id="btn-open-custom-puzzle" class="btn btn-primary btn-sm btn-custom-puzzle-glow" style="background: linear-gradient(135deg, #0284c7, #2563eb); color: #fff; font-weight: 700; border: 1px solid rgba(147, 197, 253, 0.3);" title="Tùy chỉnh mã đề &amp; Lấy đề chơi chung cùng bạn bè">
-            🎲 Lấy đề chơi chung
-          </button>
-          <button id="btn-open-seed-leaderboard" class="btn btn-warning btn-sm btn-leaderboard-glow" style="background: linear-gradient(135deg, #f59e0b, #b45309); color: #fff; font-weight: 700; border: 1px solid rgba(253, 230, 138, 0.3);" title="Mở Bảng Xếp Hạng Seed Khó Nhất Thế Giới &amp; Sudoku.com">
-            🏆 BXH Seed Khó
-          </button>
-          <button id="btn-quick-fetch-sudoku" class="btn btn-secondary btn-sm" title="Lấy ngay bài Sudoku.com theo cấp độ hiện tại">
-            🌐 Sudoku.com
-          </button>
-          <button id="btn-open-formula-guide" class="btn btn-secondary btn-sm" title="Mở Sổ tay công thức & Kỹ thuật giải Sudoku">
-            📖 Sổ tay công thức
-          </button>
-          <button id="btn-preview-next" class="btn btn-accent btn-sm" title="Xem trước nước đi tiếp theo (hiển thị ô đích và các ô chặn xung quanh)">
-            🔍 Xem trước nước tiếp
-          </button>
-          <button id="btn-open-unified-settings" class="btn btn-secondary btn-sm" title="Tùy chỉnh cài đặt Sudoku (Tia gióng, Bút chì, Số lượt lỗi)">
-            ⚙️ Tùy chỉnh
-          </button>
-          <button id="btn-restart-game" class="btn btn-secondary btn-sm" title="Đặt lại bàn cờ về ban đầu và bắt đầu lại ván này">
-            🔄 Chơi lại
-          </button>
-          <button id="btn-clear-board" class="btn btn-secondary btn-sm" title="Xóa toàn bộ bàn cờ">
-            🗑️ Xóa cờ
-          </button>
+        <div class="board-tools main-streamlined-toolbar">
+          <!-- Nhóm 1: Thao tác cờ thiết yếu -->
+          <div class="toolbar-group">
+            <button id="btn-quick-fetch-sudoku" class="btn btn-primary btn-sm" title="Lấy ngay bài Sudoku theo cấp độ">
+              ⚡ Lấy đề mới
+            </button>
+            <button id="btn-restart-game" class="btn btn-secondary btn-sm" title="Chơi lại ván này từ đầu">
+              🔄 Chơi lại
+            </button>
+            <button id="btn-clear-board" class="btn btn-secondary btn-sm" title="Xóa toàn bộ bàn cờ">
+              🗑️ Xóa cờ
+            </button>
+          </div>
+
+          <!-- Nhóm 2: Trợ thủ Kaitun & Nước đi -->
+          <div class="toolbar-group">
+            <button id="btn-quick-toggle-kaitun" class="btn btn-secondary btn-sm btn-quick-kaitun inactive" title="Bật/Tắt chế độ Kaitun suy luận">
+              ⚡ Kaitun: TẮT
+            </button>
+            <button id="btn-preview-next" class="btn btn-accent btn-sm" title="Xem trước nước đi tiếp theo">
+              🔍 Xem trước
+            </button>
+          </div>
+
+          <!-- Nhóm 3: Các chế độ & cài đặt gom vào Dropdown tinh gọn -->
+          <div class="toolbar-group">
+            <!-- Dropdown Chế độ chơi nâng cao -->
+            <div class="toolbar-dropdown-wrap" id="wrap-modes-dropdown">
+              <button id="btn-toggle-modes-dropdown" class="btn btn-secondary btn-sm dropdown-trigger-btn" type="button" title="Chế độ thi đấu & Bảng xếp hạng">
+                🏆 Chế độ ▾
+              </button>
+              <div id="modes-dropdown-menu" class="toolbar-dropdown-menu" style="display: none;">
+                <button id="btn-open-extreme-arena-alt" class="dropdown-menu-item" type="button">
+                  ⚔️ Đấu trường Extreme
+                </button>
+                <button id="btn-open-seed-leaderboard" class="dropdown-menu-item" type="button">
+                  🏆 BXH Seed Khó
+                </button>
+                <button id="btn-open-custom-puzzle" class="dropdown-menu-item" type="button">
+                  🎲 Lấy đề chơi chung
+                </button>
+              </div>
+            </div>
+
+            <!-- Dropdown Tiện ích & Cài đặt ít dùng -->
+            <div class="toolbar-dropdown-wrap" id="wrap-settings-dropdown">
+              <button id="btn-toggle-settings-dropdown" class="btn btn-secondary btn-sm dropdown-trigger-btn" type="button" title="Cài đặt & Sổ tay">
+                ⚙️ Tiện ích ▾
+              </button>
+              <div id="settings-dropdown-menu" class="toolbar-dropdown-menu" style="display: none;">
+                <button id="btn-menu-ban-pencil" class="dropdown-menu-item" type="button">
+                  🚫 Ghi chú loại trừ số (X)
+                </button>
+                <button id="btn-open-unified-settings" class="dropdown-menu-item" type="button">
+                  ⚙️ Tùy chỉnh cài đặt
+                </button>
+                <button id="btn-open-formula-guide" class="dropdown-menu-item" type="button">
+                  📖 Sổ tay công thức
+                </button>
+                <button id="btn-open-user-guide" class="dropdown-menu-item" type="button">
+                  📑 Hướng dẫn &amp; Tính năng mới
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Compatibility hidden triggers -->
           <button id="btn-open-crosshatch-settings" style="position: absolute; top: 0; left: 0; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
           <button id="btn-open-pencil-settings" style="position: absolute; top: 0; left: 10px; width: 5px; height: 5px; opacity: 0.001; z-index: 99999; pointer-events: auto; padding: 0; margin: 0; border: none;" aria-hidden="true"></button>
@@ -327,11 +384,54 @@
         </div>
       </div>
 
+      <!-- ⚡ Kaitun Reasoning HUD Banner -->
+      <div id="kaitun-reasoning-banner" class="kaitun-reasoning-banner" style="display: none;">
+        <div class="kaitun-hud-top">
+          <div class="kaitun-hud-title-group">
+            <span class="kaitun-hud-icon">⚡</span>
+            <div class="kaitun-hud-title-wrap">
+              <strong id="kaitun-hud-name">Kaitun: Naked Single</strong>
+              <span id="kaitun-hud-badge" class="kaitun-diff-pill diff-easy">🟢 Rất Dễ</span>
+            </div>
+          </div>
+          <div class="kaitun-hud-actions">
+            <span id="kaitun-hud-timer" class="kaitun-timer-badge" title="Thời gian còn lại trước khi tự ẩn (tùy chỉnh trong Cài đặt)">⏳ 5s</span>
+            <button id="btn-toggle-kaitun-hud" class="btn-toggle-kaitun" type="button" title="Thu gọn bảng">− Thu gọn</button>
+            <button id="btn-close-kaitun-hud" class="btn-close-kaitun" type="button" title="Ẩn bảng gợi ý Kaitun">✕ Ẩn</button>
+          </div>
+        </div>
+
+        <div class="kaitun-hud-target-bar">
+          <div class="kaitun-target-info">
+            <span class="kaitun-target-label">🎯 Ô ĐANG XÉT:</span>
+            <strong id="kaitun-target-coords" class="kaitun-target-coords">(Hàng 1, Cột 5)</strong>
+            <span class="kaitun-val-label">➜ Số suy luận:</span>
+            <span id="kaitun-target-val" class="kaitun-val-pill">7</span>
+          </div>
+          <div id="kaitun-self-fill-notice" class="kaitun-self-fill-notice">
+            ✍️ <em>Bạn hãy tự bấm số trên bàn phím để điền vào ô này!</em>
+          </div>
+        </div>
+
+        <div class="kaitun-hud-content">
+          <div class="kaitun-hud-row">
+            <span class="kaitun-hud-label">🧠 Logic suy nghĩ:</span>
+            <p id="kaitun-hud-logic" class="kaitun-hud-text"></p>
+          </div>
+          <div class="kaitun-hud-row">
+            <span class="kaitun-hud-label">👀 Hướng quan sát:</span>
+            <p id="kaitun-hud-visual" class="kaitun-hud-text"></p>
+          </div>
+        </div>
+      </div>
+
       <!-- 9x9 Sudoku Grid -->
       <div class="sudoku-board-wrapper">
         <div id="sudoku-grid" class="sudoku-grid">
           <!-- 81 ô sẽ được sinh tự động qua JavaScript -->
         </div>
+        <!-- Lớp vẽ tia sóng laser động chuyển hướng ngang dọc (Radar Laser Overlay) -->
+        <svg id="radar-laser-overlay" class="radar-laser-overlay" viewBox="0 0 450 450"></svg>
       </div>
 
       <!-- Numpad for Touch / Mouse editing -->
@@ -345,20 +445,24 @@
         <button class="numpad-btn" data-val="7">7</button>
         <button class="numpad-btn" data-val="8">8</button>
         <button class="numpad-btn" data-val="9">9</button>
-        <button id="btn-numpad-pencil" class="numpad-btn action-btn btn-pencil-numpad" title="Bật/Tắt chế độ ghi chú bút chì (Phím tắt: P hoặc N)">
+        <button id="btn-numpad-pencil" class="numpad-btn action-btn btn-pencil-numpad" type="button" title="Bật/Tắt chế độ ghi chú bút chì (Phím tắt: P hoặc N)">
           ✏️ <span id="numpad-pencil-text">Ghi chú: TẮT</span>
         </button>
-        <button class="numpad-btn action-btn" data-val="0" title="Xóa số hoặc xóa số nháp ở ô đang chọn">⌫ Xóa</button>
+        <button id="btn-numpad-ban-pencil" class="numpad-btn action-btn btn-ban-pencil-numpad" type="button" title="Ghi chú ô này KHÔNG THỂ có số đó (Loại trừ số) - Phím tắt: X hoặc E">
+          🚫 <span id="numpad-ban-pencil-text">Loại trừ: TẮT</span>
+        </button>
+        <button class="numpad-btn action-btn" data-val="0" type="button" title="Xóa số hoặc xóa số nháp ở ô đang chọn">⌫ Xóa</button>
       </div>
     </section>
 
 
     <!-- Column 3: Walkthrough & Step-by-Step Explanation Hub -->
     <section id="panel-solver" class="glass-panel walkthrough-panel mobile-panel-solver">
-      <div class="panel-header">
+      <div class="panel-header" style="display: flex; align-items: center; justify-content: space-between;">
         <h2 class="panel-title">
           <span class="panel-title-icon">💡</span> Lời Giải &amp; Hướng Dẫn
         </h2>
+        <button id="btn-collapse-right-panel" class="btn-panel-collapse" type="button" title="Thu gọn bảng Lời giải">▶</button>
       </div>
 
       <!-- Solution Preview Card ("Cho biết trước đáp án") -->
@@ -459,6 +563,7 @@
           Nhấp vào bất kỳ ô nào trên bàn cờ để xem chi tiết ứng viên và bước giải của ô đó.
         </div>
       </div>
+
     </section>
 
   </main>
@@ -851,6 +956,9 @@
         <button type="button" class="settings-tab-btn" data-tab="timer">
           <span>⏱️</span> Thời gian
         </button>
+        <button type="button" class="settings-tab-btn" data-tab="kaitun">
+          <span>⚡</span> Kaitun
+        </button>
       </div>
 
       <!-- Tab 1: Tia gióng ngang dọc (Cross-Hatching) -->
@@ -908,6 +1016,7 @@
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px;">
+
           <label style="background: rgba(232, 168, 124, 0.08); border: 1px solid rgba(232, 168, 124, 0.25); padding: 10px 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
             <div>
               <strong style="font-size: 0.85rem; color: var(--text-main); display: block;">🎨 Đồng bộ màu sắc chữ số</strong>
@@ -991,7 +1100,7 @@
 
         <div class="mistake-options-grid" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px;">
           <label class="mistake-opt-card">
-            <input type="radio" name="mistake-limit" value="3" checked>
+            <input type="radio" name="mistake-limit" value="3">
             <div class="opt-info">
               <strong>🎯 3 lượt sai (Tiêu chuẩn Sudoku)</strong>
               <span>Quy tắc chuẩn tương tự Sudoku.com, thử thách khả năng tập trung</span>
@@ -1015,7 +1124,7 @@
           </label>
 
           <label class="mistake-opt-card">
-            <input type="radio" name="mistake-limit" value="unlimited">
+            <input type="radio" name="mistake-limit" value="unlimited" checked>
             <div class="opt-info">
               <strong>♾️ Không giới hạn (Tự do tùy ý)</strong>
               <span>Sai bao nhiêu lần tùy thích, không bao giờ bị Game Over</span>
@@ -1134,6 +1243,105 @@
               <button type="button" class="btn btn-secondary btn-xs btn-normal-timer-quick" data-mins="20" style="flex: 1; padding: 7px;">⌛ 20p</button>
               <button type="button" class="btn btn-secondary btn-xs btn-normal-timer-quick" data-mins="30" style="flex: 1; padding: 7px;">🎯 30p</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 6: Kaitun Suy Luận Logic Theo Ô & Chữ Số -->
+      <div id="tab-pane-kaitun" class="settings-tab-pane">
+        <div style="background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.3); border-radius: 10px; padding: 12px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 6px; color: #facc15; font-weight: 700; font-size: 0.86rem; margin-bottom: 4px;">
+            <span>⚡</span> Kaitun Suy Luận Logic Thông Minh:
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; margin: 0;">
+            Khi bật tính năng này, mỗi khi bạn nhấp vào một <strong>ô trống</strong> hoặc <strong>chọn một chữ số</strong>, Kaitun sẽ tự động phân tích logic từ <strong>công thức dễ nhất đến khó nhất</strong>, chiếu tia nhận diện và giải thích chi tiết cách suy nghĩ để bạn <strong>tự điền số vào</strong>.
+          </p>
+        </div>
+
+        <!-- Bật / Tắt Kaitun -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <div>
+              <strong style="font-size: 0.88rem; color: var(--text-main); display: block; margin-bottom: 2px;">⚡ Kích hoạt Kaitun suy luận tự động</strong>
+              <span style="font-size: 0.76rem; color: var(--text-muted);">Tự động phân tích ô đang chọn hoặc số đang chọn</span>
+            </div>
+            <div class="toggle-switch-wrap" style="flex-shrink: 0;">
+              <label class="switch" title="Bật/Tắt Kaitun">
+                <input type="checkbox" id="toggle-kaitun-mode">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tùy chỉnh thời gian hiển thị (số giây) -->
+        <div style="margin-bottom: 14px;">
+          <strong style="font-size: 0.86rem; color: var(--text-main); display: block; margin-bottom: 8px;">
+            ⏱️ Thời gian hiển thị tia &amp; gợi ý (Tự ẩn sau X giây):
+          </strong>
+          <div class="kaitun-timer-options" style="display: flex; flex-direction: column; gap: 8px;">
+            <label class="mistake-opt-card">
+              <input type="radio" name="kaitun-timer-type" value="3">
+              <div class="opt-info">
+                <strong>⚡ 3 giây (Nhanh)</strong>
+                <span>Ẩn nhanh sau 3 giây để bạn tập trung tự nhớ và điền</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="kaitun-timer-type" value="5" checked>
+              <div class="opt-info">
+                <strong>🌟 5 giây (Khuyên dùng)</strong>
+                <span>Thời gian vừa đủ để nhìn rõ vệt tia và đọc qua logic suy luận</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="kaitun-timer-type" value="10">
+              <div class="opt-info">
+                <strong>🧘 10 giây (Thong thả)</strong>
+                <span>Nhiều thời gian hơn để quan sát toàn bộ bàn cờ và bệ phóng</span>
+              </div>
+            </label>
+            <label class="mistake-opt-card custom-opt">
+              <input type="radio" name="kaitun-timer-type" value="custom">
+              <div class="opt-info" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                <div>
+                  <strong>✏️ Tùy ý nhập số giây</strong>
+                  <span>Tự chọn số giây hiển thị</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <input type="number" id="input-custom-kaitun-seconds" min="1" max="60" value="7" style="width: 64px; padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(250, 204, 21, 0.4); background: rgba(0,0,0,0.25); color: #fff; text-align: center; font-weight: 700;">
+                  <span style="font-size: 0.78rem; color: var(--text-muted);">giây</span>
+                </div>
+              </div>
+            </label>
+            <label class="mistake-opt-card">
+              <input type="radio" name="kaitun-timer-type" value="0">
+              <div class="opt-info">
+                <strong>♾️ Không tự ẩn (Thủ công)</strong>
+                <span>Giữ nguyên tia và giải thích cho đến khi bạn bấm ô khác hoặc bấm đóng</span>
+              </div>
+            </label>
+          </div>
+          <p style="font-size: 0.74rem; color: var(--text-muted); margin-top: 6px; line-height: 1.4;">
+            💡 <em>Khi hết số giây quy định, tia sáng sẽ tự động ẩn đi. Muốn xem lại gợi ý bạn chỉ cần ấn lại vào ô đó!</em>
+          </p>
+        </div>
+
+        <!-- Thứ tự cấp bậc công thức từ dễ đến khó -->
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px;">
+          <strong style="font-size: 0.82rem; color: #facc15; display: block; margin-bottom: 6px;">
+            📚 Cấp bậc công thức Kaitun suy luận (Từ dễ đến khó):
+          </strong>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.76rem; color: #cbd5e1; line-height: 1.4;">
+            <div><span style="color:#4ade80; font-weight:700;">1. 🟢 Naked Single</span>: Ô chỉ còn 1 ứng viên duy nhất (bị 8 số khác chặn).</div>
+            <div><span style="color:#fde047; font-weight:700;">2. 🟡 Hidden Single</span>: Số duy nhất trong Khối 3x3, Hàng hoặc Cột.</div>
+            <div><span style="color:#fb923c; font-weight:700;">3. 🟠 Pointing / Claiming</span>: Khóa tia ứng viên tạo gọng kìm triệt tiêu.</div>
+            <div><span style="color:#60a5fa; font-weight:700;">4. 🔵 Subsets (Pairs/Triples)</span>: Cặp / Bộ ba số nhốt ứng viên.</div>
+            <div><span style="color:#c084fc; font-weight:700;">5. 🟣 X-Wing / Skyscraper</span>: Thế đòn bẩy lưới hình chữ nhật.</div>
+            <div><span style="color:#f43f5e; font-weight:700;">6. ⚡ Kaitun Chains &amp; Forcing Chains</span>: Chuỗi Domino bẻ khóa thế khó nhất thế giới.</div>
+          </div>
+          <div style="margin-top: 8px; font-size: 0.72rem; color: var(--text-muted);">
+            ✨ <em>Kaitun luôn ưu tiên phân tích công thức đơn giản nhất trước để bạn dễ học và tự điền.</em>
           </div>
         </div>
       </div>
@@ -1551,7 +1759,306 @@
     </div>
   </div>
 
+  <!-- Modal Hướng Dẫn Sử Dụng & Báo Cáo Tính Năng Mới (Release Review & User Guide) -->
+  <div id="modal-user-guide" class="modal-overlay">
+    <div class="modal-content user-guide-modal-content">
+      <div class="modal-header user-guide-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.8rem; filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.6));">📖</span>
+          <div>
+            <h3 style="margin: 0; font-size: 1.22rem; font-weight: 800; background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+              HƯỚNG DẪN SỬ DỤNG &amp; REVIEW TÍNH NĂNG MỚI
+            </h3>
+            <span style="font-size: 0.76rem; color: var(--text-muted);">
+              Sudo9ku Release Update: Zen Mode, Ghi chú kép (Cấm số), Kaitun AI Radar &amp; Teamwork Flow
+            </span>
+          </div>
+        </div>
+        <button id="btn-close-user-guide" class="modal-close-btn" title="Đóng">✕</button>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="settings-tabs-nav user-guide-tabs-nav">
+        <button type="button" class="settings-tab-btn guide-tab-btn active" data-tab="zen-default">
+          <span>🎯</span> Zen Mode &amp; Mặc định
+        </button>
+        <button type="button" class="settings-tab-btn guide-tab-btn" data-tab="pencil-notes">
+          <span>✏️</span> Ghi chú &amp; Cấm số
+        </button>
+        <button type="button" class="settings-tab-btn guide-tab-btn" data-tab="kaitun-radar">
+          <span>⚡</span> Trợ thủ Kaitun AI
+        </button>
+        <button type="button" class="settings-tab-btn guide-tab-btn" data-tab="extreme-arena">
+          <span>⚔️</span> Đấu trường Extreme
+        </button>
+        <button type="button" class="settings-tab-btn guide-tab-btn" data-tab="teamwork-flow">
+          <span>👥</span> Quy trình Teamwork
+        </button>
+      </div>
+
+      <!-- Tab Content Body -->
+      <div class="user-guide-body custom-scrollbar">
+
+        <!-- TAB 1: ZEN MODE & THIẾT LẬP MẶC ĐỊNH MỚI -->
+        <div id="guide-pane-zen-default" class="guide-tab-pane active">
+          <div class="guide-section-card highlight-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <h4 style="margin: 0; color: #38bdf8;">🎯 Chế độ Tập trung (Zen Mode) &amp; Cấu hình Mặc định Mới</h4>
+              <span class="guide-badge-pill success">Đã Áp Dụng Mặc Định</span>
+            </div>
+            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">
+              Giao diện được tái cấu trúc hoàn toàn để loại bỏ các thông tin gây nhiễu, tối ưu không gian hiển thị cho Bàn cờ Sudoku trung tâm, giúp người dùng tập trung giải đố mà không bị xao nhãng.
+            </p>
+          </div>
+
+          <div class="guide-image-container">
+            <img src="docs/images/zen_mode_default.png" alt="Giao diện Zen Mode mặc định" class="guide-screenshot">
+            <div class="guide-image-caption">Hình 1: Bàn cờ trung tâm mở rộng ở chế độ Zen Mode mặc định — Số lượt sai 0 / ∞, Kaitun TẮT, thanh công cụ gom nhóm gọn gàng.</div>
+          </div>
+
+          <h4>📌 3 Thay Đổi Cấu Hình Khởi Động Quan Trọng:</h4>
+          <table class="guide-table">
+            <thead>
+              <tr>
+                <th>Thiết lập</th>
+                <th>Giá trị mặc định</th>
+                <th>Ý nghĩa &amp; Trải nghiệm người dùng</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Số lượt sai (Mistakes)</strong></td>
+                <td><span class="guide-badge-pill success">0 / ∞ (Không giới hạn)</span></td>
+                <td>Người chơi thoải mái thử nghiệm các suy luận, không bị xử thua cuộc đột ngột khi nhập nhầm số.</td>
+              </tr>
+              <tr>
+                <td><strong>Chế độ Kaitun AI</strong></td>
+                <td><span class="guide-badge-pill warning">⚡ TẮT (Off)</span></td>
+                <td>Giữ không gian thuần túy để tự suy nghĩ. Khi gặp bế tắc, người chơi chỉ cần bấm <strong>⚡ Kaitun</strong> để mở gợi ý.</td>
+              </tr>
+              <tr>
+                <td><strong>Chế độ Tập trung (Zen Mode)</strong></td>
+                <td><span class="guide-badge-pill success">🎯 BẬT (On)</span></td>
+                <td>Tự động ẩn 2 bảng bên trái (Quét ảnh) và bên phải (Lời giải), tập trung 100% diện tích màn hình cho bàn cờ.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h4>🕹️ Phím tắt &amp; Nút điều khiển nhanh:</h4>
+          <ul>
+            <li><span class="guide-kbd">🎯 Tập trung</span> trên thanh Header: Bật/Tắt chế độ Zen Mode bất kỳ lúc nào.</li>
+            <li><span class="guide-kbd">📷 Quét ảnh</span>: Mở lại bảng Nhận diện ảnh khi cần tải ảnh đề bài từ máy hoặc camera.</li>
+            <li><span class="guide-kbd">💡 Lời giải</span>: Mở lại bảng Bước giải chi tiết và phân tích công thức logic toàn diện.</li>
+          </ul>
+        </div>
+
+        <!-- TAB 2: GHI CHÚ KÉP & LOẠI TRỪ CẤM SỐ -->
+        <div id="guide-pane-pencil-notes" class="guide-tab-pane">
+          <div class="guide-section-card highlight-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <h4 style="margin: 0; color: #38bdf8;">✏️ Hệ Thống Ghi Chú Kép: Ứng Viên &amp; Loại Trừ (Cấm Số)</h4>
+              <span class="guide-badge-pill">Tính Năng Mới</span>
+            </div>
+            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">
+              Sudo9ku hỗ trợ hai hệ thống ghi chú độc lập giúp người chơi giải các ván cờ Sudoku cấp độ Chuyên gia và Ác mộng một cách bài bản nhất.
+            </p>
+          </div>
+
+          <div class="guide-image-container">
+            <img src="docs/images/ban_pencil_note.png" alt="Ghi chú loại trừ số" class="guide-screenshot">
+            <div class="guide-image-caption">Hình 2: Số 2 được gạch chéo đỏ loại trừ (banned candidate) trong ô (Hàng 1, Cột 5), giúp nhìn rõ ô chỉ còn số 7 khả dĩ.</div>
+          </div>
+
+          <h4>🔍 Phân Biệt Hai Chế Độ Ghi Chú:</h4>
+          <table class="guide-table">
+            <thead>
+              <tr>
+                <th>Chế độ ghi chú</th>
+                <th>Cách kích hoạt</th>
+                <th>Hiển thị trên bàn cờ</th>
+                <th>Ứng dụng chiến thuật</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>✏️ Bút chì thường (Candidate)</strong></td>
+                <td>Nút <strong>✏️ Ghi chú</strong> hoặc phím <span class="guide-kbd">P</span></td>
+                <td>Chữ số nhỏ màu xanh nhạt trong ô</td>
+                <td>Liệt kê các số có khả năng xuất hiện tại ô này.</td>
+              </tr>
+              <tr>
+                <td><strong>🚫 Loại trừ / Cấm số (Negative Note)</strong></td>
+                <td>Nút <strong>⚙️ Tiện ích ➔ 🚫 Ghi chú loại trừ</strong> hoặc phím <span class="guide-kbd">X</span></td>
+                <td>Chữ số nhỏ có <strong>gạch chéo đỏ</strong></td>
+                <td>Đánh dấu số chắc chắn <em>không thể</em> nằm ở ô này sau khi đã loại suy hàng/cột/khối.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h4>💡 Bí quyết giải đố cao cấp:</h4>
+          <p style="font-size: 0.84rem; color: var(--text-muted);">
+            Khi áp dụng kỹ thuật <em>Pointing Pairs</em>, <em>Box-Line Reduction</em> hoặc <em>X-Wing</em>, bạn thường chứng minh được một số bị triệt tiêu khỏi một loạt ô. Sử dụng chế độ <strong>🚫 Cấm số (phím X)</strong> giúp bạn ghi nhớ vị trí triệt tiêu ngay lập tức mà không sợ quên hay nhầm lẫn với số ứng viên khả dĩ!
+          </p>
+        </div>
+
+        <!-- TAB 3: TRỢ THỦ KAITUN AI & RADAR LASER WAVE -->
+        <div id="guide-pane-kaitun-radar" class="guide-tab-pane">
+          <div class="guide-section-card highlight-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <h4 style="margin: 0; color: #38bdf8;">⚡ Trợ Thủ Kaitun AI &amp; Tia Quét Radar Laser Wave</h4>
+              <span class="guide-badge-pill success">Đã Khắc Phục Lỗi Nút Ẩn/Hiện</span>
+            </div>
+            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">
+              Kaitun AI là trợ thủ suy luận thông minh, tự động phân tích logic theo từng ô và từng chữ số, kèm tia quét radar trực quan giúp bạn nắm bắt bản chất bước giải thay vì chỉ nhận đáp án thụ động.
+            </p>
+          </div>
+
+          <div class="guide-images-grid">
+            <div class="guide-image-container" style="margin: 0;">
+              <img src="docs/images/kaitun_hud_expanded.png" alt="Kaitun HUD mở rộng" class="guide-screenshot">
+              <div class="guide-image-caption">Hình 3a: Bảng HUD mở rộng — Chi tiết Logic suy nghĩ, Hướng quan sát, Ô đang xét và Số suy luận.</div>
+            </div>
+            <div class="guide-image-container" style="margin: 0;">
+              <img src="docs/images/kaitun_hud_collapsed.png" alt="Kaitun HUD thu gọn" class="guide-screenshot">
+              <div class="guide-image-caption">Hình 3b: Bảng HUD thu gọn thành thanh 1 hàng — Tiết kiệm diện tích, hoàn toàn không che bàn cờ.</div>
+            </div>
+          </div>
+
+          <h4>🛠️ Các Nút Điều Khiển Trên Bảng HUD Kaitun:</h4>
+          <ul>
+            <li><strong>Nút <code>− Thu gọn / + Mở rộng</code>:</strong> Cho phép chuyển đổi tức thời giữa dạng chi tiết (đầy đủ logic) và dạng thanh ngang gọn gàng (chỉ hiện tên công thức và ô mục tiêu).</li>
+            <li><strong>Nút <code>✕ Ẩn</code>:</strong> Ẩn hoàn toàn bảng HUD ngay lập tức khi bạn muốn toàn quyền nhìn bàn cờ.</li>
+            <li><strong>Huy hiệu <code>⏳ 5s</code>:</strong> Đồng hồ đếm ngược tự động ẩn bảng HUD sau thời gian tùy chỉnh (3s, 5s, 10s hoặc Giữ cố định trong <em>⚙️ Cài đặt ➔ Kaitun</em>).</li>
+            <li><strong>Tia gióng Radar Laser Wave:</strong> Bật sáng hàng ngang, cột dọc và khối 3x3 tương ứng giúp mắt nhận diện ngay vùng chặn số.</li>
+          </ul>
+        </div>
+
+        <!-- TAB 4: ĐẤU TRƯỜNG EXTREME & 25 SEED KHÓ -->
+        <div id="guide-pane-extreme-arena" class="guide-tab-pane">
+          <div class="guide-section-card highlight-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <h4 style="margin: 0; color: #38bdf8;">⚔️ Đấu Trường Sinh Tồn (Extreme Arena) &amp; 25 Hạt Nhân Thế Giới</h4>
+              <span class="guide-badge-pill danger">Cực Khó</span>
+            </div>
+            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">
+              Chế độ thi đấu tính giờ và sinh tồn với các câu đố Sudoku khó nhất lịch sử toán học, tích hợp cơ chế Săn số &amp; Khóa số.
+            </p>
+          </div>
+
+          <h4>🏆 Bộ sưu tập 25 Đề Siêu Cấp:</h4>
+          <ul>
+            <li><strong>Đề 17 ô Gordon Royle:</strong> Số lượng ô cho sẵn ít nhất có thể để đảm bảo lời giải duy nhất (được chứng minh bằng toán học tổ hợp).</li>
+            <li><strong>AI Escargot &amp; Everest (Tiến sĩ Arto Inkala):</strong> Đề Sudoku được mệnh danh là khó nhất thế giới, đòi hỏi chuỗi giả định (Forcing Chains) sâu đến hàng chục bước.</li>
+            <li><strong>Top Sudoku.com Extreme:</strong> Các đề Sudoku có tỷ lệ giải thành công dưới 5% từ hàng triệu người chơi toàn cầu.</li>
+          </ul>
+
+          <h4>🎯 Tính Năng Săn Số &amp; Khóa Số:</h4>
+          <p style="font-size: 0.84rem; color: var(--text-muted);">
+            Khi bật chế độ Đấu trường hoặc nhấp đúp vào bàn phím số, hệ thống sẽ kích hoạt <strong>Khóa số (Lock Digit)</strong>: mọi lần nhấp ô tiếp theo sẽ tự động điền chữ số đó hoặc chuyển đổi ghi chú của chữ số đó, tăng tốc độ thao tác của tuyển thủ giải cờ lên gấp 3 lần!
+          </p>
+        </div>
+
+        <!-- TAB 5: QUY TRÌNH PHỐI HỢP TEAMWORK -->
+        <div id="guide-pane-teamwork-flow" class="guide-tab-pane">
+          <div class="guide-section-card highlight-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <h4 style="margin: 0; color: #38bdf8;">👥 Quy Trình Phối Hợp Đội Ngũ (Teamwork Flow &amp; Review Checklist)</h4>
+              <span class="guide-badge-pill success">Quy Chuẩn Dự Án</span>
+            </div>
+            <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">
+              Tài liệu hướng dẫn phối hợp phát triển giữa các lập trình viên, tester và maintainer nhằm đảm bảo tính toàn vẹn và đồng bộ giữa bản Web và ứng dụng Android Native.
+            </p>
+          </div>
+
+          <h4>📐 1. Kiến Trúc Dự Án &amp; Đồng Bộ Đa Nền Tảng:</h4>
+          <table class="guide-table">
+            <thead>
+              <tr>
+                <th>Thành phần</th>
+                <th>Vị trí thư mục</th>
+                <th>Nguyên tắc đồng bộ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Mã nguồn Web chính</strong></td>
+                <td><code>/index.html</code>, <code>/css/</code>, <code>/js/</code></td>
+                <td>Nơi phát triển chính của toàn bộ giao diện và logic giải đố.</td>
+              </tr>
+              <tr>
+                <td><strong>Ứng dụng Android (Assets)</strong></td>
+                <td><code>/android/app/src/main/assets/www/</code></td>
+                <td><strong>Bắt buộc copy đồng bộ</strong> toàn bộ file web và assets sang đây sau mỗi lần cập nhật.</td>
+              </tr>
+              <tr>
+                <td><strong>Tài nguyên hình ảnh hướng dẫn</strong></td>
+                <td><code>/docs/images/</code></td>
+                <td>Chứa ảnh chụp màn hình chất lượng cao phục vụ tài liệu và modal hướng dẫn.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h4>🚀 2. Chuẩn Git Workflow &amp; Cache-Busting:</h4>
+          <ul>
+            <li><strong>Nhánh chính (<code>main</code>):</strong> Luôn giữ mã nguồn ổn định, đã qua chạy thử nghiệm không có lỗi cú pháp.</li>
+            <li><strong>Nhánh tính năng (<code>feature/*</code>):</strong> Tạo nhánh riêng cho mỗi tính năng hoặc đợt tối ưu UI.</li>
+            <li><strong>Tăng Version Cache-Busting:</strong> Khi sửa CSS hoặc JS, <em>luôn tăng số phiên bản query param</em> trong <code>index.html</code> (ví dụ <code>style.css?v=19</code> và <code>app.js?v=41</code>) để trình duyệt người dùng không dùng file cũ trong cache.</li>
+          </ul>
+
+          <h4>📋 3. Checklist Kiểm Tra Trước Khi Phát Hành (Release Checklist):</h4>
+          <table class="guide-table">
+            <thead>
+              <tr>
+                <th>Hạng mục kiểm tra</th>
+                <th>Tiêu chí đạt chuẩn</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Kiểm tra cú pháp JS</td>
+                <td>Chạy lệnh <code>node --check js/app.js</code> không có lỗi cú pháp</td>
+                <td><span class="guide-badge-pill success">PASS</span></td>
+              </tr>
+              <tr>
+                <td>Giao diện mặc định</td>
+                <td>Zen Mode bật, Lỗi không giới hạn (0/∞), Kaitun tắt mặc định</td>
+                <td><span class="guide-badge-pill success">PASS</span></td>
+              </tr>
+              <tr>
+                <td>Ghi chú kép (Cấm số)</td>
+                <td>Phím tắt X và nút menu hoạt động, gạch đỏ rõ ràng</td>
+                <td><span class="guide-badge-pill success">PASS</span></td>
+              </tr>
+              <tr>
+                <td>Kaitun HUD Controls</td>
+                <td>Nút Thu gọn, Mở rộng và Ẩn hoạt động mượt mà, không lỗi layout</td>
+                <td><span class="guide-badge-pill success">PASS</span></td>
+              </tr>
+              <tr>
+                <td>Đồng bộ Android Assets</td>
+                <td>Thư mục <code>android/app/src/main/assets/www/</code> đồng bộ 100% với Web root</td>
+                <td><span class="guide-badge-pill success">PASS</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-actions user-guide-footer">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">
+          Sudo9ku Solver Engine • Xem mã nguồn mở tại <a href="https://github.com/tiennood/sudo9ku" target="_blank" rel="noopener" style="color: #38bdf8; text-decoration: underline;">GitHub</a>
+        </span>
+        <button id="btn-close-user-guide-footer" class="btn btn-secondary btn-sm" type="button">
+          Đã hiểu &amp; Đóng
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/sudoku_puzzles.js"></script>
-  <script type="module" src="js/app.js?v=14"></script>
+  <script type="module" src="js/app.js?v=41"></script>
 </body>
 </html>

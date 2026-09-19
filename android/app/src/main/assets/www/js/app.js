@@ -53,11 +53,11 @@ class SudokuApp {
     this.dragStart = null;
     this.dragInitialBounds = null;
 
-    // Cài đặt số lượt sai & Thống kê lịch sử ván cờ (Mặc định 10 lượt)
-    this.maxMistakes = localStorage.getItem('sudoku_max_mistakes') || '10';
-    if (this.maxMistakes === '3') {
-      this.maxMistakes = '10';
-      localStorage.setItem('sudoku_max_mistakes', '10');
+    // Cài đặt số lượt sai & Thống kê lịch sử ván cờ (Mặc định: Không giới hạn)
+    this.maxMistakes = localStorage.getItem('sudoku_max_mistakes');
+    if (!this.maxMistakes || this.maxMistakes === '3' || this.maxMistakes === '10') {
+      this.maxMistakes = 'unlimited';
+      localStorage.setItem('sudoku_max_mistakes', 'unlimited');
     }
     this.customMistakesVal = parseInt(localStorage.getItem('sudoku_custom_mistakes_val') || '10', 10);
     this.instantFeedback = localStorage.getItem('sudoku_instant_feedback') !== 'false';
@@ -72,6 +72,11 @@ class SudokuApp {
     this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
     this.autoRemoveNotes = localStorage.getItem('sudoku_auto_remove_notes') !== 'false';
     this.highlightMatchingNotes = localStorage.getItem('sudoku_highlight_matching_notes') !== 'false';
+
+    // Cài đặt Ghi chú loại trừ thủ công (Negative Pencil Marks - Ô này KHÔNG THỂ có số này)
+    this.isBanPencilMode = false;
+    this.manualBannedCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    this.manualBannedCandidatesBackup = null;
 
     // Cài đặt Tia gióng ngang dọc (Cross-Hatching) & Đồng bộ màu số
     this.crosshatchMode = localStorage.getItem('sudoku_crosshatch_mode') || 'all'; // 'all' | '3' | '2' | '1' | 'none'
@@ -89,9 +94,20 @@ class SudokuApp {
     this.normalTimerInterval = null;
     this.activeCustomSeed = null;
     this.activeCustomDifficulty = 'medium';
+    this.activeRadarDigit = 5;
+    this.activeRadarFormula = null;
+
+    // ⚡ Kaitun Suy Luận Thông Minh (Mặc định: TẮT)
+    const storedKaitun = localStorage.getItem('sudoku_kaitun_mode');
+    this.kaitunModeEnabled = storedKaitun === 'true'; // Mặc định TẮT trừ khi người dùng chủ động BẬT
+    this.kaitunDuration = parseInt(localStorage.getItem('sudoku_kaitun_duration') || '5', 10);
+    this._kaitunTimerId = null;
+    this._kaitunSecondsLeft = 0;
+    this._activeKaitunFormula = null;
 
     this.diagramViewer = new FormulaDiagramViewer();
 
+    this.initHardwareAcceleration();
     this.initDOM();
     this.arenaManager = new ExtremeArenaManager(this);
     this.initBoardGrid();
@@ -102,9 +118,32 @@ class SudokuApp {
     this.updateCrosshatchBtnLabel();
     this.updateSolutionPreviewLockUI();
     this.updateNormalTimerDisplay();
+    this.updateQuickKaitunUI();
 
     // Tự động kiểm tra tham số URL (đề chơi chung) hoặc nạp ảnh mẫu ban đầu
     this.checkInitialUrlParams();
+  }
+
+  /**
+   * Kích hoạt tăng tốc phần cứng card đồ họa rời (NVIDIA RTX 3050)
+   * Yêu cầu GPU Context hiệu năng cao (High Performance) thay vì render bằng CPU
+   */
+  initHardwareAcceleration() {
+    try {
+      const probeCanvas = document.createElement('canvas');
+      probeCanvas.width = 16;
+      probeCanvas.height = 16;
+      const gl = probeCanvas.getContext('webgl2', { powerPreference: 'high-performance' }) ||
+                 probeCanvas.getContext('webgl', { powerPreference: 'high-performance' });
+      if (gl) {
+        const ext = gl.getExtension('WEBGL_debug_renderer_info');
+        const rendererName = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'GPU High Performance';
+        console.log('⚡ [GPU Acceleration] Đã kích hoạt kết xuất tăng tốc GPU:', rendererName);
+        this.gpuRendererName = rendererName;
+      }
+    } catch (e) {
+      console.warn('Lỗi kích hoạt GPU hardware acceleration:', e);
+    }
   }
 
   initDOM() {
@@ -131,9 +170,12 @@ class SudokuApp {
       btnOpenUnifiedSettings: document.getElementById('btn-open-unified-settings'),
       btnRestartGame: document.getElementById('btn-restart-game'),
       btnClearBoard: document.getElementById('btn-clear-board'),
-      numpadBtns: document.querySelectorAll('.numpad-btn:not(.btn-pencil-numpad)'),
+      numpadBtns: document.querySelectorAll('.numpad-btn:not(.btn-pencil-numpad):not(.btn-ban-pencil-numpad)'),
       btnNumpadPencil: document.getElementById('btn-numpad-pencil'),
       numpadPencilText: document.getElementById('numpad-pencil-text'),
+      btnNumpadBanPencil: document.getElementById('btn-numpad-ban-pencil'),
+      numpadBanPencilText: document.getElementById('numpad-ban-pencil-text'),
+      btnMenuBanPencil: document.getElementById('btn-menu-ban-pencil'),
 
       // Input & Image
       dropzone: document.getElementById('dropzone'),
@@ -197,6 +239,13 @@ class SudokuApp {
       formulaModal: document.getElementById('formula-modal'),
       btnCloseFormulaModal: document.getElementById('btn-close-formula-modal'),
       formulaGuideBody: document.getElementById('formula-guide-body'),
+
+      // User Guide & Release Review Modal
+      btnOpenUserGuide: document.getElementById('btn-open-user-guide'),
+      modalUserGuide: document.getElementById('modal-user-guide'),
+      btnCloseUserGuide: document.getElementById('btn-close-user-guide'),
+      btnCloseUserGuideFooter: document.getElementById('btn-close-user-guide-footer'),
+      userGuideTabBtns: document.querySelectorAll('.guide-tab-btn'),
 
       // Inspector
       inspectorCoords: document.getElementById('inspector-coords'),
@@ -315,7 +364,35 @@ class SudokuApp {
       btnSeedTabs: document.querySelectorAll('.btn-seed-tab'),
       btnCustomPickLeaderboardSeed: document.getElementById('btn-custom-pick-leaderboard-seed'),
       conqueredSeedsCount: document.getElementById('conquered-seeds-count'),
-      leaderboardMatchSummary: document.getElementById('leaderboard-match-summary')
+      leaderboardMatchSummary: document.getElementById('leaderboard-match-summary'),
+
+      // ⚡ Kaitun Reasoning HUD & Settings DOM
+      kaitunReasoningBanner: document.getElementById('kaitun-reasoning-banner'),
+      kaitunHudName: document.getElementById('kaitun-hud-name'),
+      kaitunHudBadge: document.getElementById('kaitun-hud-badge'),
+      kaitunHudTimer: document.getElementById('kaitun-hud-timer'),
+      btnToggleKaitunHud: document.getElementById('btn-toggle-kaitun-hud'),
+      btnCloseKaitunHud: document.getElementById('btn-close-kaitun-hud'),
+      kaitunTargetCoords: document.getElementById('kaitun-target-coords'),
+      kaitunTargetVal: document.getElementById('kaitun-target-val'),
+      kaitunHudLogic: document.getElementById('kaitun-hud-logic'),
+      kaitunHudVisual: document.getElementById('kaitun-hud-visual'),
+      kaitunSelfFillNotice: document.getElementById('kaitun-self-fill-notice'),
+      btnQuickToggleKaitun: document.getElementById('btn-quick-toggle-kaitun'),
+      quickKaitunLabel: document.getElementById('quick-kaitun-label'),
+      toggleKaitunMode: document.getElementById('toggle-kaitun-mode'),
+      inputCustomKaitunSeconds: document.getElementById('input-custom-kaitun-seconds'),
+
+      // Overlay SVG tia sáng laser
+      radarLaserOverlay: document.getElementById('radar-laser-overlay'),
+
+      // Legacy Tactical Digit Radar (An toàn khi radar bị gỡ khỏi UI)
+      digitRadarCard: document.getElementById('digit-radar-card'),
+      radarActiveDigitLabel: document.getElementById('radar-active-digit-label'),
+      radarStatusBadge: document.getElementById('radar-status-badge'),
+      radarDigitSelector: document.getElementById('radar-digit-selector'),
+      digitRadarContent: document.getElementById('digit-radar-content'),
+      btnTriggerKaitun: document.getElementById('btn-trigger-kaitun')
     };
   }
 
@@ -562,6 +639,33 @@ class SudokuApp {
       });
     }
 
+    // 2a-3. Hướng dẫn & Review Tính năng mới Modal
+    if (this.dom.btnOpenUserGuide) {
+      this.dom.btnOpenUserGuide.addEventListener('click', () => {
+        const settingsMenu = document.getElementById('settings-dropdown-menu');
+        if (settingsMenu) settingsMenu.style.display = 'none';
+        this.openUserGuideModal();
+      });
+    }
+    if (this.dom.btnCloseUserGuide) {
+      this.dom.btnCloseUserGuide.addEventListener('click', () => this.closeUserGuideModal());
+    }
+    if (this.dom.btnCloseUserGuideFooter) {
+      this.dom.btnCloseUserGuideFooter.addEventListener('click', () => this.closeUserGuideModal());
+    }
+    if (this.dom.modalUserGuide) {
+      this.dom.modalUserGuide.addEventListener('click', (e) => {
+        if (e.target === this.dom.modalUserGuide) this.closeUserGuideModal();
+      });
+    }
+    if (this.dom.userGuideTabBtns) {
+      this.dom.userGuideTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.switchUserGuideTab(btn.dataset.tab);
+        });
+      });
+    }
+
     this.dom.btnReprocess.addEventListener('click', () => {
       if (this.currentGridBounds) {
         this.reprocessWithCustomBounds(this.currentGridBounds);
@@ -756,6 +860,40 @@ class SudokuApp {
       });
     });
 
+    // 5b. Tactical Digit Radar selector (Chọn số cần quét thế bí)
+    if (this.dom.radarDigitSelector) {
+      this.dom.radarDigitSelector.addEventListener('click', (e) => {
+        const btn = e.target.closest('.radar-digit-pill');
+        if (btn && btn.dataset.digit) {
+          const d = parseInt(btn.dataset.digit, 10);
+          this.setRadarDigit(d);
+          this.playSound('step');
+        }
+      });
+    }
+
+    // 5c. Nút Kích Hoạt Kaitun (Bẻ khóa dây chuyền thế cực bí)
+    if (this.dom.btnTriggerKaitun) {
+      this.dom.btnTriggerKaitun.addEventListener('click', () => {
+        this.triggerKaitunAutoResolve();
+      });
+    }
+
+    // 5d. Nút đóng Kaitun HUD & Nút bật/tắt nhanh Kaitun
+    if (this.dom.btnCloseKaitunHud) {
+      this.dom.btnCloseKaitunHud.addEventListener('click', () => {
+        this.clearKaitunInference();
+      });
+    }
+    if (this.dom.btnQuickToggleKaitun) {
+      this.dom.btnQuickToggleKaitun.addEventListener('click', () => {
+        this.toggleKaitunMode();
+      });
+    }
+
+    // 5e. Thiết lập bố cục tối giản, thu gọn thanh công cụ & ẩn các bảng ít dùng
+    this._initLayoutAndToolbarToggles();
+
     window.addEventListener('keydown', (e) => this.handleKeyDown(e));
 
     // 6. Chế độ bút chì thủ công & Tùy chỉnh ứng viên
@@ -768,6 +906,18 @@ class SudokuApp {
     if (this.dom.btnNumpadPencil) {
       this.dom.btnNumpadPencil.addEventListener('click', () => {
         this.togglePencilMode();
+      });
+    }
+
+    if (this.dom.btnNumpadBanPencil) {
+      this.dom.btnNumpadBanPencil.addEventListener('click', () => {
+        this.toggleBanPencilMode();
+      });
+    }
+
+    if (this.dom.btnMenuBanPencil) {
+      this.dom.btnMenuBanPencil.addEventListener('click', () => {
+        this.toggleBanPencilMode();
       });
     }
 
@@ -2323,6 +2473,36 @@ class SudokuApp {
     this.dom.formulaModal.classList.remove('active', 'show');
   }
 
+  openUserGuideModal(defaultTab = 'zen-default') {
+    if (!this.dom.modalUserGuide) return;
+    this.switchUserGuideTab(defaultTab);
+    this.dom.modalUserGuide.classList.add('active', 'show');
+  }
+
+  closeUserGuideModal() {
+    if (!this.dom.modalUserGuide) return;
+    this.dom.modalUserGuide.classList.remove('active', 'show');
+  }
+
+  switchUserGuideTab(tabName) {
+    const tabs = document.querySelectorAll('.guide-tab-btn');
+    const panes = document.querySelectorAll('.guide-tab-pane');
+    tabs.forEach(btn => {
+      if (btn.dataset.tab === tabName) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    panes.forEach(pane => {
+      if (pane.id === `guide-pane-${tabName}`) {
+        pane.classList.add('active');
+      } else {
+        pane.classList.remove('active');
+      }
+    });
+  }
+
   /**
    * Hiển thị minh họa trực quan một công thức giải lên bàn cờ từ Sổ tay công thức
    * Đồng bộ 100% với Tiến trình bước giải của ván cờ
@@ -3039,10 +3219,25 @@ class SudokuApp {
   }
 
   /**
+   * Lấy nghiệm chuẩn xác duy nhất của bàn cờ (chuẩn 100% logic toán học)
+   */
+  getSolution() {
+    if (this.solution) return this.solution;
+    if (this.initialBoard) {
+      const res = SudokuSolver.solve(this.initialBoard);
+      if (res && res.solved && res.solution) {
+        this.solution = res.solution;
+        return this.solution;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Điền toàn bộ tất cả số đáp án đúng vào bàn cờ (hoàn thành 81/81 ô)
    */
   fillAllSolutionDigits() {
-    if (!this.solution) {
+    if (!this.getSolution()) {
       const res = SudokuSolver.solve(this.initialBoard);
       if (res.solved) {
         this.solution = res.solution;
@@ -3319,6 +3514,11 @@ class SudokuApp {
       }
     }
 
+    // Lấy tập hợp các ô bị loại trừ candidate cho số đang chọn
+    const effectiveElimSet = (selectedVal !== 0)
+      ? this.getEliminatedCandidateCells(selectedVal, candidates)
+      : new Set();
+
     // Tính toán các hàng, cột, khối phát tia gióng ngang dọc (Cross-Hatching)
     const rayRows = new Set();
     const rayCols = new Set();
@@ -3460,6 +3660,17 @@ class SudokuApp {
           }
         }
 
+        // 3b. Highlight theo Tactical Digit Radar (Nếu người dùng đang soi 1 công thức)
+        if (this.activeRadarFormula) {
+          const isBase = this.activeRadarFormula.baseCells && this.activeRadarFormula.baseCells.some(p => p.r === r && p.c === c);
+          const isTarget = this.activeRadarFormula.eliminatedCells && this.activeRadarFormula.eliminatedCells.some(p => p.r === r && p.c === c);
+          const isConfirmed = this.activeRadarFormula.confirmedCells && this.activeRadarFormula.confirmedCells.some(p => p.r === r && p.c === c);
+
+          if (isBase) cell.classList.add('radar-base-cell');
+          if (isTarget) cell.classList.add('radar-target-cell');
+          if (isConfirmed) cell.classList.add('radar-confirmed-cell');
+        }
+
         // 4. Hiển thị giá trị
         const isGiven = this.initialBoard[r][c] !== 0;
         let displayVal = this.currentBoard[r][c];
@@ -3523,26 +3734,81 @@ class SudokuApp {
               cellCands = (this.manualCandidates && this.manualCandidates[r]) ? (this.manualCandidates[r][c] || []) : [];
             }
 
-            if (cellCands.length > 0) {
+            const cellBanned = (this.manualBannedCandidates && this.manualBannedCandidates[r]) ? (this.manualBannedCandidates[r][c] || []) : [];
+
+            const isKaitunConfirmedTarget = this._activeKaitunFormula && (
+              (this._activeKaitunFormula.confirmedCells && this._activeKaitunFormula.confirmedCells.some(p => p.r === r && p.c === c)) ||
+              (this._activeKaitunFormula.subtype === 'naked-single' && this._activeKaitunFormula.targetCell && this._activeKaitunFormula.targetCell.r === r && this._activeKaitunFormula.targetCell.c === c) ||
+              (this._activeKaitunFormula.subtype === 'hidden-single' && this._activeKaitunFormula.targetCell && this._activeKaitunFormula.targetCell.r === r && this._activeKaitunFormula.targetCell.c === c) ||
+              (this._activeKaitunFormula.isGuidance && this._activeKaitunFormula.suggestedCell && this._activeKaitunFormula.suggestedCell.r === r && this._activeKaitunFormula.suggestedCell.c === c)
+            );
+
+            cell.classList.toggle('kaitun-target-active', Boolean(isKaitunConfirmedTarget));
+
+            if (isKaitunConfirmedTarget) {
+              candGrid.style.display = 'none';
+            } else if (cellCands.length > 0 || cellBanned.length > 0) {
               candGrid.style.display = 'grid';
               candSpans.forEach(sp => {
                 const num = parseInt(sp.dataset.candidate, 10);
-                const hasCand = cellCands.includes(num);
-                sp.classList.toggle('active', hasCand);
-                sp.style.visibility = hasCand ? 'visible' : 'hidden';
+                const isBanned = cellBanned.includes(num);
+                const hasCand = !isBanned && cellCands.includes(num);
 
-                // Highlight số ứng viên trùng với số đang chọn
-                if (hasCand && this.highlightMatchingNotes && selectedVal && selectedVal === num) {
-                  sp.classList.add('highlight-match');
+                if (isBanned) {
+                  sp.classList.add('active', 'candidate-banned', 'candidate-eliminated-red');
+                  sp.classList.remove('highlight-match', 'candidate-confirmed-gold');
+                  sp.style.visibility = 'visible';
+                  sp.title = `Ô này không thể là số ${num}`;
+                } else if (hasCand) {
+                  sp.classList.remove('candidate-banned');
+                  sp.classList.add('active');
+                  sp.style.visibility = 'visible';
+                  sp.title = '';
+
+                  // Highlight số ứng viên trùng với số đang chọn hoặc đang soi Radar
+                  const isRadarActiveForNum = this.activeRadarFormula && this.activeRadarFormula.digit === num;
+                  if (hasCand && ((this.highlightMatchingNotes && selectedVal && selectedVal === num) || isRadarActiveForNum)) {
+                    let isEliminated = effectiveElimSet.has(`${r},${c}`);
+                    let isConfirmed = this.candidateConfirmedCells && this.candidateConfirmedCells.has(`${r},${c}`);
+
+                    if (isRadarActiveForNum) {
+                      if (this.activeRadarFormula.eliminatedCells && this.activeRadarFormula.eliminatedCells.some(p => p.r === r && p.c === c)) {
+                        isEliminated = true;
+                        isConfirmed = false;
+                      } else if (this.activeRadarFormula.baseCells && this.activeRadarFormula.baseCells.some(p => p.r === r && p.c === c)) {
+                        isConfirmed = true;
+                        isEliminated = false;
+                      } else if (this.activeRadarFormula.confirmedCells && this.activeRadarFormula.confirmedCells.some(p => p.r === r && p.c === c)) {
+                        isConfirmed = true;
+                        isEliminated = false;
+                      }
+                    }
+
+                    if (isEliminated) {
+                      sp.classList.add('candidate-eliminated-red');
+                      sp.classList.remove('highlight-match', 'candidate-confirmed-gold');
+                    } else if (isConfirmed) {
+                      sp.classList.add('candidate-confirmed-gold', 'highlight-match');
+                      sp.classList.remove('candidate-eliminated-red');
+                    } else {
+                      sp.classList.add('highlight-match');
+                      sp.classList.remove('candidate-confirmed-gold', 'candidate-eliminated-red');
+                    }
+                  } else {
+                    sp.classList.remove('highlight-match', 'candidate-eliminated-red', 'candidate-confirmed-gold');
+                  }
                 } else {
-                  sp.classList.remove('highlight-match');
+                  sp.classList.remove('active', 'candidate-banned', 'highlight-match', 'candidate-eliminated-red', 'candidate-confirmed-gold');
+                  sp.style.visibility = 'hidden';
+                  sp.title = '';
                 }
               });
             } else {
               candGrid.style.display = 'none';
               candSpans.forEach(sp => {
-                sp.classList.remove('active', 'highlight-match');
+                sp.classList.remove('active', 'candidate-banned', 'highlight-match', 'candidate-eliminated-red', 'candidate-confirmed-gold');
                 sp.style.visibility = 'hidden';
+                sp.title = '';
               });
             }
           } else {
@@ -3553,7 +3819,17 @@ class SudokuApp {
     }
 
     this.updateInspector();
+    this.updateTacticalRadar();
     this.updateNumpadStatus();
+
+    // Vẽ tia sóng laser động chuyển hướng ngang dọc nếu đang soi 1 công thức Kaitun hoặc Radar
+    if (this._activeKaitunFormula) {
+      this._drawMultiFormulasOverlay([this._activeKaitunFormula]);
+    } else if (this.activeRadarFormula) {
+      this.drawRadarLaserWave(this.activeRadarFormula);
+    } else {
+      this.clearRadarLaserWave();
+    }
   }
 
   /**
@@ -3567,8 +3843,22 @@ class SudokuApp {
       this.closePreview(false);
     }
     this.selectedCell = { row, col };
+
+    // Đồng bộ số cho Tactical Radar nếu ô có số hoặc ứng viên
+    const cellVal = this.currentBoard[row][col];
+    if (cellVal !== 0) {
+      this.activeRadarDigit = cellVal;
+    }
+
     this.playSound('select');
     this.renderBoard();
+
+    // ⚡ Kaitun suy luận tự động khi bấm vào ô:
+    if (this.kaitunModeEnabled) {
+      this.triggerKaitunInference(row, col);
+    } else {
+      this.clearKaitunInference();
+    }
   }
 
   /**
@@ -3620,6 +3910,11 @@ class SudokuApp {
       const cands = SudokuSolver.getCandidates(this.currentBoard, row, col);
       const manualNotes = (this.manualCandidates && this.manualCandidates[row]) ? (this.manualCandidates[row][col] || []) : [];
       const manualStr = manualNotes.length > 0 ? manualNotes.join(', ') : 'Chưa có';
+      const manualBanned = (this.manualBannedCandidates && this.manualBannedCandidates[row]) ? (this.manualBannedCandidates[row][col] || []) : [];
+      const bannedStr = manualBanned.length > 0 ? manualBanned.join(', ') : '';
+      const bannedHtml = bannedStr ? `<p style="font-size: 0.76rem; color: #fca5a5; margin-bottom: 4px;">
+        🚫 <strong>Ghi chú KHÔNG THỂ có số:</strong> [${bannedStr}]
+      </p>` : '';
       const stepObj = stepIdx !== null ? this.solveSteps[stepIdx] : null;
       const strategy = stepObj ? stepObj.strategyName : 'Chưa xác định';
       const expl = stepObj ? stepObj.explanation : '';
@@ -3631,6 +3926,7 @@ class SudokuApp {
                 <p style="font-size: 0.76rem; color: var(--teal); margin-bottom: 4px;">
                   ✏️ <strong>Ghi chú nháp của bạn:</strong> [${manualStr}]
                 </p>
+                ${bannedHtml}
                 <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 6px;">
                   🤖 Ứng viên hợp lệ: [${cands.join(', ') || 'Không còn'}]
                 </p>
@@ -3685,10 +3981,33 @@ class SudokuApp {
           html += `<div style="background: rgba(0, 0, 0, 0.25); padding: 8px 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid var(--accent-amber);">
                     <strong style="color: var(--accent-amber); font-size: 0.75rem;">Bước ${stepIdx}: ${strategy}</strong>
                     <p style="font-size: 0.76rem; color: #cbd5e1; margin-top: 2px; line-height: 1.4;">${expl}</p>
-                   </div>
                    <button class="btn btn-secondary btn-sm" id="btn-jump-to-step">
                     ▶ Đi tới bước giải ô này (${stepIdx})
                    </button>`;
+        }
+        if (this.candidateEliminationReasons && this.candidateEliminationReasons.has(`${row},${col}`)) {
+          const reason = this.candidateEliminationReasons.get(`${row},${col}`);
+          html += `<div class="elimination-reason-box">
+                    <strong>🔴 Phân tích loại trừ Đỏ - Vàng:</strong>
+                    ${reason}
+                   </div>`;
+        }
+        if (this.candidateConfirmedCells && this.candidateConfirmedCells.has(`${row},${col}`)) {
+          html += `<div style="background: rgba(250, 204, 21, 0.12); border: 1px solid rgba(250, 204, 21, 0.35); border-left: 3px solid #facc15; padding: 8px 10px; border-radius: 6px; margin-top: 8px; margin-bottom: 8px; font-size: 0.78rem; color: #fde047;">
+                    <strong style="color: #facc15; display: block; margin-bottom: 2px;">🟡 Mắt xích chốt số:</strong>
+                    Vị trí duy nhất còn hợp lệ trong đơn vị này. Bắt buộc phải là số đang chọn!
+                   </div>`;
+        }
+        if (this._activeKaitunFormula) {
+          html += `<div style="background: linear-gradient(135deg, rgba(250,204,21,0.12), rgba(234,179,8,0.06)); border: 1.5px solid rgba(250,204,21,0.4); padding: 10px 12px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                      <strong style="color: #facc15; font-size: 0.8rem;">⚡ Kaitun: ${this._activeKaitunFormula.name}</strong>
+                      <span style="font-size: 0.68rem; padding: 1px 6px; border-radius: 10px; background: rgba(250,204,21,0.2); color: #fef08a; font-weight:700;">${this._activeKaitunFormula.diffBadge || ''}</span>
+                    </div>
+                    <div style="font-size: 0.75rem; color: #e2e8f0; line-height: 1.4; margin-bottom: 4px;"><strong>🧠 Suy luận:</strong> ${this._activeKaitunFormula.logic || this._activeKaitunFormula.explanation || ''}</div>
+                    <div style="font-size: 0.73rem; color: #38bdf8; line-height: 1.4;"><strong>👀 Quan sát:</strong> ${this._activeKaitunFormula.visual || ''}</div>
+                    <div style="font-size: 0.72rem; color: #fde047; font-weight: 600; margin-top: 5px;">✍️ Hãy tự bấm số trên bàn phím để điền!</div>
+                   </div>`;
         }
       }
     }
@@ -3753,6 +4072,3688 @@ class SudokuApp {
         this.inputSelectedCellValue(parseInt(finalVal, 10));
       });
     }
+  }
+
+  /**
+   * Thay đổi chữ số đang soi trên Tactical Digit Radar (1 - 9)
+   */
+  setRadarDigit(digit, reRender = true) {
+    if (!digit || digit < 1 || digit > 9) return;
+    this.activeRadarDigit = digit;
+    this.activeRadarFormula = null; // Reset trạng thái soi chi tiết khi chuyển số
+    if (reRender) {
+      this.renderBoard();
+    } else {
+      this.updateTacticalRadar();
+    }
+    if (this.kaitunModeEnabled) {
+      this.triggerKaitunDigitInference(digit);
+    }
+  }
+
+  /**
+   * Quét toàn diện tất cả các công thức chiến thuật có thể áp dụng riêng cho con số `digit`
+   * khi người chơi rơi vào thế bí:
+   * 1. Đơn vị chốt số (Full House / Hidden Single trong Khối, Hàng, Cột)
+   * 2. Khóa tia Pointing Lines (Khối ➔ Hàng hoặc Khối ➔ Cột)
+   * 3. Chặn ngược Claiming / Box-Line Reduction (Hàng/Cột ➔ Khối)
+   * 4. Cánh bướm X-Wing (2 Hàng 2 Cột hoặc 2 Cột 2 Hàng)
+   * 5. Nhà chọc trời Skyscraper (2 chân đế chung, 2 mái lệch triệt tiêu vùng giao thoa)
+   */
+  scanTacticalFormulasForDigit(digit) {
+    if (!digit || digit < 1 || digit > 9) return [];
+    const formulas = [];
+
+    // Kiểm tra xem số này đã hoàn thành (đã có 9 ô đúng) chưa
+    let placedCount = 0;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const v = (this.showSolution && this.solution) ? this.solution[r][c] : this.currentBoard[r][c];
+        if (v === digit) placedCount++;
+      }
+    }
+    if (placedCount >= 9) {
+      return [{
+        id: `completed-${digit}`,
+        digit,
+        type: 'completed',
+        name: `Số ${digit} đã hoàn thành (9/9 ô)`,
+        difficulty: 'Hoàn tất',
+        badge: '✓ Đã xong',
+        baseCells: [],
+        eliminatedCells: [],
+        confirmedCells: [],
+        explanation: `Tất cả 9 vị trí của số ${digit} trên bàn cờ đã được giải chính xác. Không cần áp dụng thêm công thức cho số này!`
+      }];
+    }
+
+    // Lấy ma trận ứng viên hiện tại
+    let candidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0) {
+          if (this.pencilType === 'manual' && this.manualCandidates && this.manualCandidates[r] && this.manualCandidates[r][c].length > 0) {
+            candidates[r][c] = [...this.manualCandidates[r][c]];
+          } else {
+            candidates[r][c] = SudokuSolver.getCandidates(this.currentBoard, r, c);
+          }
+        }
+      }
+    }
+
+    // --- 1. ĐƠN VỊ CHỐT SỐ (HIDDEN SINGLE TRONG KHỐI / HÀNG / CỘT) ---
+    // Khối 3x3
+    for (let b = 0; b < 9; b++) {
+      const br = Math.floor(b / 3) * 3;
+      const bc = (b % 3) * 3;
+      let alreadyInBox = false;
+      const possible = [];
+      for (let r = br; r < br + 3; r++) {
+        for (let c = bc; c < bc + 3; c++) {
+          if (this.currentBoard[r][c] === digit) { alreadyInBox = true; break; }
+          if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+            possible.push({ r, c });
+          }
+        }
+        if (alreadyInBox) break;
+      }
+      if (!alreadyInBox && possible.length === 1) {
+        const p = possible[0];
+        formulas.push({
+          id: `single-box-${b}`,
+          digit,
+          type: 'single',
+          name: `Khối ${b + 1}: Chốt số ${digit} (Hidden Single)`,
+          difficulty: 'Cơ bản',
+          badge: '🟢 Đơn vị Khối',
+          baseCells: [{ r: p.r, c: p.c }],
+          eliminatedCells: [],
+          confirmedCells: [{ r: p.r, c: p.c }],
+          explanation: `Trong Khối 3x3 số ${b + 1}, chỉ còn duy nhất ô (${p.r + 1}, ${p.c + 1}) có thể chứa số ${digit}. Bắt buộc điền ${digit}!`
+        });
+      }
+    }
+
+    // Hàng
+    for (let r = 0; r < 9; r++) {
+      let alreadyInRow = false;
+      const possible = [];
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === digit) { alreadyInRow = true; break; }
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+          possible.push({ r, c });
+        }
+      }
+      if (!alreadyInRow && possible.length === 1) {
+        const p = possible[0];
+        formulas.push({
+          id: `single-row-${r}`,
+          digit,
+          type: 'single',
+          name: `Hàng ${r + 1}: Chốt số ${digit} (Hidden Single)`,
+          difficulty: 'Cơ bản',
+          badge: '🟢 Đơn vị Hàng',
+          baseCells: [{ r: p.r, c: p.c }],
+          eliminatedCells: [],
+          confirmedCells: [{ r: p.r, c: p.c }],
+          explanation: `Trên Hàng ${r + 1}, chỉ duy nhất ô Cột ${p.c + 1} có thể nhận số ${digit}. Điền ngay số ${digit}!`
+        });
+      }
+    }
+
+    // Cột
+    for (let c = 0; c < 9; c++) {
+      let alreadyInCol = false;
+      const possible = [];
+      for (let r = 0; r < 9; r++) {
+        if (this.currentBoard[r][c] === digit) { alreadyInCol = true; break; }
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+          possible.push({ r, c });
+        }
+      }
+      if (!alreadyInCol && possible.length === 1) {
+        const p = possible[0];
+        formulas.push({
+          id: `single-col-${c}`,
+          digit,
+          type: 'single',
+          name: `Cột ${c + 1}: Chốt số ${digit} (Hidden Single)`,
+          difficulty: 'Cơ bản',
+          badge: '🟢 Đơn vị Cột',
+          baseCells: [{ r: p.r, c: p.c }],
+          eliminatedCells: [],
+          confirmedCells: [{ r: p.r, c: p.c }],
+          explanation: `Trên Cột ${c + 1}, chỉ duy nhất ô Hàng ${p.r + 1} có thể nhận số ${digit}. Điền ngay số ${digit}!`
+        });
+      }
+    }
+
+    // --- 2. KHÓA TIA TRONG KHỐI (POINTING LINES) ---
+    for (let b = 0; b < 9; b++) {
+      const br = Math.floor(b / 3) * 3;
+      const bc = (b % 3) * 3;
+      const boxCells = [];
+      for (let r = br; r < br + 3; r++) {
+        for (let c = bc; c < bc + 3; c++) {
+          if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+            boxCells.push({ r, c });
+          }
+        }
+      }
+      if (boxCells.length >= 2 && boxCells.length <= 3) {
+        // Cùng Hàng
+        const row = boxCells[0].r;
+        if (boxCells.every(p => p.r === row)) {
+          const elims = [];
+          for (let c = 0; c < 9; c++) {
+            if ((c < bc || c >= bc + 3) && this.currentBoard[row][c] === 0 && candidates[row][c].includes(digit)) {
+              elims.push({ r: row, c });
+            }
+          }
+          if (elims.length > 0) {
+            formulas.push({
+              id: `pointing-row-${b}-${row}`,
+              digit,
+              type: 'pointing',
+              name: `Khóa tia Pointing: Khối ${b + 1} ➔ Hàng ${row + 1}`,
+              difficulty: 'Nâng cao',
+              badge: '⚡ Khóa tia Hàng',
+              baseCells: boxCells,
+              eliminatedCells: elims,
+              confirmedCells: [],
+              explanation: `Trong Khối ${b + 1}, số ${digit} bắt buộc phải nằm trên Hàng ${row + 1} ở các ô bệ phóng. Do đó, triệt tiêu số ${digit} ở ${elims.length} ô ngoài khối trên cùng hàng!`
+            });
+          }
+        }
+
+        // Cùng Cột
+        const col = boxCells[0].c;
+        if (boxCells.every(p => p.c === col)) {
+          const elims = [];
+          for (let r = 0; r < 9; r++) {
+            if ((r < br || r >= br + 3) && this.currentBoard[r][col] === 0 && candidates[r][col].includes(digit)) {
+              elims.push({ r, c: col });
+            }
+          }
+          if (elims.length > 0) {
+            formulas.push({
+              id: `pointing-col-${b}-${col}`,
+              digit,
+              type: 'pointing',
+              name: `Khóa tia Pointing: Khối ${b + 1} ➔ Cột ${col + 1}`,
+              difficulty: 'Nâng cao',
+              badge: '⚡ Khóa tia Cột',
+              baseCells: boxCells,
+              eliminatedCells: elims,
+              confirmedCells: [],
+              explanation: `Trong Khối ${b + 1}, số ${digit} bắt buộc phải nằm trên Cột ${col + 1} ở các ô bệ phóng. Do đó, triệt tiêu số ${digit} ở ${elims.length} ô ngoài khối trên cùng cột!`
+            });
+          }
+        }
+      }
+    }
+
+    // --- 3. CHẶN NGƯỢC KHỐI (CLAIMING / BOX-LINE REDUCTION) ---
+    // Hàng ➔ Khối
+    for (let r = 0; r < 9; r++) {
+      const rowCandCols = [];
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+          rowCandCols.push(c);
+        }
+      }
+      if (rowCandCols.length >= 2 && rowCandCols.length <= 3) {
+        const bCol = Math.floor(rowCandCols[0] / 3);
+        if (rowCandCols.every(c => Math.floor(c / 3) === bCol)) {
+          const b = Math.floor(r / 3) * 3 + bCol;
+          const br = Math.floor(b / 3) * 3;
+          const bc = bCol * 3;
+          const elims = [];
+          for (let i = br; i < br + 3; i++) {
+            if (i !== r) {
+              for (let j = bc; j < bc + 3; j++) {
+                if (this.currentBoard[i][j] === 0 && candidates[i][j].includes(digit)) {
+                  elims.push({ r: i, c: j });
+                }
+              }
+            }
+          }
+          if (elims.length > 0) {
+            formulas.push({
+              id: `claiming-row-${r}-${b}`,
+              digit,
+              type: 'claiming',
+              name: `Chặn ngược Claiming: Hàng ${r + 1} ➔ Khối ${b + 1}`,
+              difficulty: 'Nâng cao',
+              badge: '⚡ Chặn ngược Khối',
+              baseCells: rowCandCols.map(c => ({ r, c })),
+              eliminatedCells: elims,
+              confirmedCells: [],
+              explanation: `Số ${digit} trên Hàng ${r + 1} chỉ có thể nằm trong Khối ${b + 1}. Do đó, triệt tiêu số ${digit} ở ${elims.length} ô khác thuộc Khối ${b + 1}!`
+            });
+          }
+        }
+      }
+    }
+
+    // Cột ➔ Khối
+    for (let c = 0; c < 9; c++) {
+      const colCandRows = [];
+      for (let r = 0; r < 9; r++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+          colCandRows.push(r);
+        }
+      }
+      if (colCandRows.length >= 2 && colCandRows.length <= 3) {
+        const bRow = Math.floor(colCandRows[0] / 3);
+        if (colCandRows.every(r => Math.floor(r / 3) === bRow)) {
+          const b = bRow * 3 + Math.floor(c / 3);
+          const br = bRow * 3;
+          const bc = Math.floor(c / 3) * 3;
+          const elims = [];
+          for (let i = br; i < br + 3; i++) {
+            for (let j = bc; j < bc + 3; j++) {
+              if (j !== c && this.currentBoard[i][j] === 0 && candidates[i][j].includes(digit)) {
+                elims.push({ r: i, c: j });
+              }
+            }
+          }
+          if (elims.length > 0) {
+            formulas.push({
+              id: `claiming-col-${c}-${b}`,
+              digit,
+              type: 'claiming',
+              name: `Chặn ngược Claiming: Cột ${c + 1} ➔ Khối ${b + 1}`,
+              difficulty: 'Nâng cao',
+              badge: '⚡ Chặn ngược Khối',
+              baseCells: colCandRows.map(r => ({ r, c })),
+              eliminatedCells: elims,
+              confirmedCells: [],
+              explanation: `Số ${digit} trên Cột ${c + 1} chỉ có thể nằm trong Khối ${b + 1}. Do đó, triệt tiêu số ${digit} ở ${elims.length} ô khác thuộc Khối ${b + 1}!`
+            });
+          }
+        }
+      }
+    }
+
+    // --- 4. CÁNH BƯỚM X-WING ---
+    // Theo Hàng
+    const rowPairs = [];
+    for (let r = 0; r < 9; r++) {
+      const cols = [];
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) cols.push(c);
+      }
+      if (cols.length === 2) rowPairs.push({ r, cols });
+    }
+    for (let i = 0; i < rowPairs.length; i++) {
+      for (let j = i + 1; j < rowPairs.length; j++) {
+        const r1 = rowPairs[i];
+        const r2 = rowPairs[j];
+        if (r1.cols[0] === r2.cols[0] && r1.cols[1] === r2.cols[1]) {
+          const [c1, c2] = r1.cols;
+          const elims = [];
+          for (let r = 0; r < 9; r++) {
+            if (r !== r1.r && r !== r2.r) {
+              if (this.currentBoard[r][c1] === 0 && candidates[r][c1].includes(digit)) elims.push({ r, c: c1 });
+              if (this.currentBoard[r][c2] === 0 && candidates[r][c2].includes(digit)) elims.push({ r, c: c2 });
+            }
+          }
+          if (elims.length > 0) {
+            formulas.push({
+              id: `xwing-rows-${r1.r}-${r2.r}`,
+              digit,
+              type: 'x-wing',
+              name: `Cánh bướm X-Wing: Hàng ${r1.r + 1} & ${r2.r + 1}`,
+              difficulty: 'Chuyên gia',
+              badge: '🔥 X-Wing Hàng',
+              baseCells: [{ r: r1.r, c: c1 }, { r: r1.r, c: c2 }, { r: r2.r, c: c1 }, { r: r2.r, c: c2 }],
+              eliminatedCells: elims,
+              confirmedCells: [],
+              explanation: `4 ô bệ phóng trên Hàng ${r1.r + 1} & ${r2.r + 1} khóa số ${digit} trên 2 Cột ${c1 + 1} & ${c2 + 1}. Triệt tiêu số ${digit} ở ${elims.length} ô còn lại trên 2 cột!`
+            });
+          }
+        }
+      }
+    }
+
+    // Theo Cột
+    const colPairs = [];
+    for (let c = 0; c < 9; c++) {
+      const rows = [];
+      for (let r = 0; r < 9; r++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) rows.push(r);
+      }
+      if (rows.length === 2) colPairs.push({ c, rows });
+    }
+    for (let i = 0; i < colPairs.length; i++) {
+      for (let j = i + 1; j < colPairs.length; j++) {
+        const c1 = colPairs[i];
+        const c2 = colPairs[j];
+        if (c1.rows[0] === c2.rows[0] && c1.rows[1] === c2.rows[1]) {
+          const [r1, r2] = c1.rows;
+          const elims = [];
+          for (let c = 0; c < 9; c++) {
+            if (c !== c1.c && c !== c2.c) {
+              if (this.currentBoard[r1][c] === 0 && candidates[r1][c].includes(digit)) elims.push({ r: r1, c });
+              if (this.currentBoard[r2][c] === 0 && candidates[r2][c].includes(digit)) elims.push({ r: r2, c });
+            }
+          }
+          if (elims.length > 0) {
+            formulas.push({
+              id: `xwing-cols-${c1.c}-${c2.c}`,
+              digit,
+              type: 'x-wing',
+              name: `Cánh bướm X-Wing: Cột ${c1.c + 1} & ${c2.c + 1}`,
+              difficulty: 'Chuyên gia',
+              badge: '🔥 X-Wing Cột',
+              baseCells: [{ r: r1, c: c1.c }, { r: r2, c: c1.c }, { r: r1, c: c2.c }, { r: r2, c: c2.c }],
+              eliminatedCells: elims,
+              confirmedCells: [],
+              explanation: `4 ô bệ phóng trên Cột ${c1.c + 1} & ${c2.c + 1} khóa số ${digit} trên 2 Hàng ${r1 + 1} & ${r2 + 1}. Triệt tiêu số ${digit} ở ${elims.length} ô còn lại trên 2 hàng!`
+            });
+          }
+        }
+      }
+    }
+
+    // --- 5. NHÀ CHỌC TRỜI (SKYSCRAPER) ---
+    for (let i = 0; i < rowPairs.length; i++) {
+      for (let j = i + 1; j < rowPairs.length; j++) {
+        const r1 = rowPairs[i];
+        const r2 = rowPairs[j];
+        const sharedCols = r1.cols.filter(c => r2.cols.includes(c));
+        if (sharedCols.length === 1) {
+          const baseCol = sharedCols[0];
+          const roof1 = r1.cols.find(c => c !== baseCol);
+          const roof2 = r2.cols.find(c => c !== baseCol);
+          if (roof1 !== roof2) {
+            const elims = [];
+            for (let r = 0; r < 9; r++) {
+              for (let c = 0; c < 9; c++) {
+                if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+                  const seesRoof1 = (r === r1.r || c === roof1 || (Math.floor(r / 3) === Math.floor(r1.r / 3) && Math.floor(c / 3) === Math.floor(roof1 / 3)));
+                  const seesRoof2 = (r === r2.r || c === roof2 || (Math.floor(r / 3) === Math.floor(r2.r / 3) && Math.floor(c / 3) === Math.floor(roof2 / 3)));
+                  if (seesRoof1 && seesRoof2 && !(r === r1.r && c === roof1) && !(r === r2.r && c === roof2)) {
+                    elims.push({ r, c });
+                  }
+                }
+              }
+            }
+            if (elims.length > 0) {
+              formulas.push({
+                id: `skyscraper-rows-${r1.r}-${r2.r}`,
+                digit,
+                type: 'skyscraper',
+                name: `Nhà chọc trời Skyscraper: Hàng ${r1.r + 1} & ${r2.r + 1}`,
+                difficulty: 'Chuyên gia',
+                badge: '🔥 Skyscraper',
+                baseCells: [
+                  { r: r1.r, c: baseCol }, { r: r2.r, c: baseCol },
+                  { r: r1.r, c: roof1 }, { r: r2.r, c: roof2 }
+                ],
+                eliminatedCells: elims,
+                confirmedCells: [],
+                explanation: `Chân đế chung tại Cột ${baseCol + 1} nối 2 đỉnh mái (${r1.r + 1}, ${roof1 + 1}) & (${r2.r + 1}, ${roof2 + 1}). Triệt tiêu số ${digit} ở các ô giao thoa nhìn thấy cả 2 đỉnh mái!`
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // --- 6. ⚡ KAITUN: CHUỖI DÂY CHUYỀN BẺ KHÓA THẾ CỰC BÍ (AIC / X-CHAIN & XY-CHAIN) ---
+    const kaitunChains = this.findKaitunChains(digit, candidates);
+    const kaitunXY = this.findKaitunXYChains(digit, candidates);
+    formulas.push(...kaitunChains, ...kaitunXY);
+
+    // --- 7. ⚡ KAITUN FORCING CHAINS: Vũ khí tuyệt đối cho các bài đố khó nhất hành tinh ---
+    // Bảo vệ tuyệt đối: Lọc bỏ mọi công thức có mâu thuẫn với nghiệm chuẩn
+    const sol = this.getSolution();
+    if (sol) {
+      return formulas.filter(f => {
+        if (f.confirmedCells && f.confirmedCells.length > 0) {
+          const badConfirm = f.confirmedCells.some(cf => {
+            const v = cf.val !== undefined ? cf.val : f.digit;
+            return v && sol[cf.r][cf.c] !== v;
+          });
+          if (badConfirm) return false;
+        }
+        if (f.type === 'single' && f.targetCell && f.targetCell.r !== undefined) {
+          const v = f.targetCell.value !== undefined ? f.targetCell.value : f.digit;
+          if (typeof v === 'number' && sol[f.targetCell.r][f.targetCell.c] !== v) return false;
+        }
+        if (f.eliminatedCells && f.eliminatedCells.length > 0) {
+          f.eliminatedCells = f.eliminatedCells.filter(p => sol[p.r][p.c] !== f.digit);
+          if (f.eliminatedCells.length === 0 && (!f.confirmedCells || f.confirmedCells.length === 0)) {
+            return false;
+          }
+        }
+        return true;
+      });
+    }
+
+    return formulas;
+  }
+
+  /**
+   * ⚡ KAITUN: Thuật toán tìm chuỗi suy luận luân phiên (Alternating Inference Chains - AIC / X-Chain)
+   * Tìm chuỗi mắt xích liên kết mạnh/yếu bẻ gãy các thế cờ cực khó nhất thế giới
+   */
+  findKaitunChains(digit, candidates) {
+    const chains = [];
+    const sees = (p1, p2) => {
+      if (p1.r === p2.r && p1.c === p2.c) return false;
+      return (
+        p1.r === p2.r ||
+        p1.c === p2.c ||
+        (Math.floor(p1.r / 3) === Math.floor(p2.r / 3) && Math.floor(p1.c / 3) === Math.floor(p2.c / 3))
+      );
+    };
+
+    // 1. Thu thập tất cả các ô có chứa ứng viên digit
+    const candCells = [];
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r] && candidates[r][c] && candidates[r][c].includes(digit)) {
+          candCells.push({ r, c });
+        }
+      }
+    }
+    if (candCells.length < 4) return chains;
+
+    // 2. Tìm các liên kết mạnh (Strong Links): 2 ô duy nhất trong 1 hàng, 1 cột, hoặc 1 khối
+    const strongAdj = new Map();
+    candCells.forEach(p => strongAdj.set(`${p.r},${p.c}`, []));
+
+    const addStrong = (p1, p2, type) => {
+      const k1 = `${p1.r},${p1.c}`;
+      const k2 = `${p2.r},${p2.c}`;
+      if (!strongAdj.get(k1).some(n => n.r === p2.r && n.c === p2.c)) {
+        strongAdj.get(k1).push({ r: p2.r, c: p2.c, type });
+      }
+      if (!strongAdj.get(k2).some(n => n.r === p1.r && n.c === p1.c)) {
+        strongAdj.get(k2).push({ r: p1.r, c: p1.c, type });
+      }
+    };
+
+    // Hàng
+    for (let r = 0; r < 9; r++) {
+      const inRow = candCells.filter(p => p.r === r);
+      if (inRow.length === 2) addStrong(inRow[0], inRow[1], 'row');
+    }
+    // Cột
+    for (let c = 0; c < 9; c++) {
+      const inCol = candCells.filter(p => p.c === c);
+      if (inCol.length === 2) addStrong(inCol[0], inCol[1], 'col');
+    }
+    // Khối
+    for (let br = 0; br < 3; br++) {
+      for (let bc = 0; bc < 3; bc++) {
+        const inBox = candCells.filter(p => Math.floor(p.r / 3) === br && Math.floor(p.c / 3) === bc);
+        if (inBox.length === 2) addStrong(inBox[0], inBox[1], 'box');
+      }
+    }
+
+    // 3. Tìm kiếm chuỗi luân phiên (AIC / X-Chain) bằng BFS
+    const foundSignatures = new Set();
+
+    candCells.forEach(startNode => {
+      const strongNeighbors = strongAdj.get(`${startNode.r},${startNode.c}`);
+      if (!strongNeighbors || strongNeighbors.length === 0) return;
+
+      const queue = [];
+      strongNeighbors.forEach(n2 => {
+        queue.push([startNode, { r: n2.r, c: n2.c }]);
+      });
+
+      while (queue.length > 0) {
+        const chain = queue.shift();
+        const len = chain.length;
+        const lastNode = chain[len - 1];
+
+        // Chuỗi có độ dài chẵn >= 4 và kết thúc bằng liên kết mạnh:
+        if (len >= 4 && len % 2 === 0) {
+          const cFirst = chain[0];
+          const cLast = lastNode;
+
+          // Tìm các ô bị triệt tiêu nhìn thấy cả cFirst và cLast (không bao giờ triệt tiêu đáp án chuẩn)
+          const sol = this.getSolution();
+          const elims = candCells.filter(target => {
+            if (chain.some(p => p.r === target.r && p.c === target.c)) return false;
+            if (sol && sol[target.r][target.c] === digit) return false;
+            return sees(target, cFirst) && sees(target, cLast);
+          });
+
+          if (elims.length > 0) {
+            const sig = `${cFirst.r},${cFirst.c}-${cLast.r},${cLast.c}-${elims.map(e => `${e.r},${e.c}`).sort().join(';')}`;
+            if (!foundSignatures.has(sig)) {
+              foundSignatures.add(sig);
+
+              const chainName = len === 4 
+                ? `Kaitun 4 Mắt Xích: (${cFirst.r + 1}, ${cFirst.c + 1}) ➔ (${cLast.r + 1}, ${cLast.c + 1})`
+                : `⚡ Siêu Kaitun ${len} Mắt Xích Dây Chuyền`;
+
+              chains.push({
+                id: `kaitun-${digit}-${len}-${cFirst.r}-${cFirst.c}-${cLast.r}-${cLast.c}`,
+                digit,
+                type: 'kaitun',
+                name: chainName,
+                difficulty: len <= 4 ? 'Cực Khó' : 'Ác Mộng (Nightmare)',
+                badge: `⚡ Kaitun ${len} Mắt Xích`,
+                chainNodes: chain.map(p => ({ r: p.r, c: p.c })),
+                baseCells: [cFirst, cLast],
+                eliminatedCells: elims,
+                confirmedCells: [],
+                explanation: `Chuỗi dây chuyền Kaitun ${len} mắt xích xen kẽ: Giả sử (${cFirst.r + 1}, ${cFirst.c + 1}) không là ${digit} dẫn truyền Domino ép (${cLast.r + 1}, ${cLast.c + 1}) phải là ${digit}. Do đó ít nhất 1 trong 2 ô đầu mút phải là ${digit}, tạo gọng kìm triệt tiêu số ${digit} ở ${elims.length} ô giao thoa!`
+              });
+            }
+          }
+        }
+
+        // Mở rộng chuỗi nếu chưa vượt quá độ dài 8
+        if (len < 8) {
+          if (len % 2 === 0) {
+            // Cần tìm WEAK LINK từ lastNode tới nextNode
+            candCells.forEach(nextNode => {
+              if (chain.some(p => p.r === nextNode.r && p.c === nextNode.c)) return;
+              if (sees(lastNode, nextNode)) {
+                queue.push([...chain, nextNode]);
+              }
+            });
+          } else {
+            // Cần tìm STRONG LINK từ lastNode tới nextNode
+            const strongs = strongAdj.get(`${lastNode.r},${lastNode.c}`) || [];
+            strongs.forEach(nextNode => {
+              if (chain.some(p => p.r === nextNode.r && p.c === nextNode.c)) return;
+              queue.push([...chain, { r: nextNode.r, c: nextNode.c }]);
+            });
+          }
+        }
+      }
+    });
+
+    return chains;
+  }
+
+  /**
+   * ⚡ SIÊU KAITUN ĐA CHỮ SỐ (XY-CHAIN / BIVALUE CHAIN):
+   * Khắc tinh của các bài toán đố khó nhất thế giới (Arto Inkala 2012, AI Escargot).
+   * Chuỗi liên kết qua các ô chỉ có 2 ứng viên bivalue [x, y] ➔ [y, z] ➔ [z, x]
+   */
+  findKaitunXYChains(digit, candidates) {
+    const chains = [];
+    const sees = (p1, p2) => {
+      if (p1.r === p2.r && p1.c === p2.c) return false;
+      return (
+        p1.r === p2.r ||
+        p1.c === p2.c ||
+        (Math.floor(p1.r / 3) === Math.floor(p2.r / 3) && Math.floor(p1.c / 3) === Math.floor(p2.c / 3))
+      );
+    };
+
+    // Tìm tất cả các ô có đúng 2 ứng viên (bivalue cells)
+    const bivalueCells = [];
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r] && candidates[r][c] && candidates[r][c].length === 2) {
+          bivalueCells.push({ r, c, cands: [...candidates[r][c]] });
+        }
+      }
+    }
+    if (bivalueCells.length < 3) return chains;
+
+    // Tìm ô bắt đầu có chứa digit: [digit, otherVal]
+    const startCandidates = bivalueCells.filter(cell => cell.cands.includes(digit));
+    const foundSignatures = new Set();
+
+    startCandidates.forEach(start => {
+      const other = start.cands.find(v => v !== digit);
+      const queue = [{ path: [start], nextMatch: other }];
+
+      while (queue.length > 0) {
+        const item = queue.shift();
+        const chain = item.path;
+        const currentLen = chain.length;
+        const lastCell = chain[currentLen - 1];
+        const matchVal = item.nextMatch;
+
+        // Nếu chuỗi >= 3 ô và ô cuối có chứa digit (khác ô bắt đầu)
+        if (currentLen >= 3 && lastCell.cands.includes(digit) && (lastCell.r !== start.r || lastCell.c !== start.c)) {
+          const cFirst = chain[0];
+          const cLast = lastCell;
+
+          // Tìm các ô nhìn thấy cả cFirst và cLast và có chứa digit
+          const elims = [];
+          for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+              if (this.currentBoard[r][c] === 0 && candidates[r] && candidates[r][c] && candidates[r][c].includes(digit)) {
+                const isChainCell = chain.some(p => p.r === r && p.c === c);
+                if (!isChainCell && sees({ r, c }, cFirst) && sees({ r, c }, cLast)) {
+                  elims.push({ r, c });
+                }
+              }
+            }
+          }
+
+          if (elims.length > 0) {
+            const sig = `xy-${cFirst.r},${cFirst.c}-${cLast.r},${cLast.c}-${elims.map(e => `${e.r},${e.c}`).sort().join(';')}`;
+            if (!foundSignatures.has(sig)) {
+              foundSignatures.add(sig);
+
+              const chainSteps = chain.map(p => `(${p.r + 1}, ${p.c + 1})[${p.cands.join('/')}]`).join(' ➔ ');
+
+              chains.push({
+                id: `kaitun-xy-${digit}-${currentLen}-${cFirst.r}-${cFirst.c}-${cLast.r}-${cLast.c}`,
+                digit,
+                type: 'kaitun',
+                subtype: 'xy-chain',
+                name: `⚡ Siêu Kaitun Đa Số (XY-Chain ${currentLen} Mắt Xích)`,
+                difficulty: 'Ác Mộng (Nightmare)',
+                badge: `⚡ Kaitun XY-Chain`,
+                chainNodes: chain.map(p => ({ r: p.r, c: p.c, cands: p.cands })),
+                baseCells: [cFirst, cLast],
+                eliminatedCells: elims,
+                confirmedCells: [],
+                explanation: `Chuỗi Domino Kaitun XY-Chain bivalue: ${chainSteps}. Nếu ô đầu (${cFirst.r + 1}, ${cFirst.c + 1}) không là ${digit} kéo theo chuỗi phản ứng ép ô cuối (${cLast.r + 1}, ${cLast.c + 1}) BẮT BUỘC là ${digit}. Do đó số ${digit} bị triệt tiêu ở ${elims.length} ô giao thoa!`
+              });
+            }
+          }
+        }
+
+        // Mở rộng chuỗi tối đa 7 ô
+        if (currentLen < 7) {
+          bivalueCells.forEach(nextCell => {
+            if (chain.some(p => p.r === nextCell.r && p.c === nextCell.c)) return;
+            if (sees(lastCell, nextCell) && nextCell.cands.includes(matchVal)) {
+              const nextOther = nextCell.cands.find(v => v !== matchVal);
+              queue.push({
+                path: [...chain, nextCell],
+                nextMatch: nextOther
+              });
+            }
+          });
+        }
+      }
+    });
+
+    return chains;
+  }
+
+  /**
+   * ⚡ KAITUN FORCING CHAINS — VŨ KHÍ TUYỆT ĐỐI:
+   * Nếu MỌI ứng viên của 1 ô đều dẫn đến cùng 1 kết luận (loại trừ 1 số khỏi 1 ô nào đó),
+   * thì kết luận đó là CHẮC CHẮN — không cần đoán mò!
+   * Đây là kỹ thuật dùng để phá vỡ các "AI Escargot" và "Arto Inkala 2012" cấp hành tinh.
+   */
+  findKaitunForcingChains(digit, candidates) {
+    const results = [];
+    const sees = (p1, p2) => {
+      if (p1.r === p2.r && p1.c === p2.c) return false;
+      return (
+        p1.r === p2.r ||
+        p1.c === p2.c ||
+        (Math.floor(p1.r / 3) === Math.floor(p2.r / 3) && Math.floor(p1.c / 3) === Math.floor(p2.c / 3))
+      );
+    };
+
+    // Hàm BFS nhỏ theo dõi hệ quả khi giả sử 1 ô = val (true) hoặc ô đó ≠ val (false)
+    const traceConsequences = (startR, startC, startVal, assume) => {
+      // consequences[r][c] = Set of values forced into / ruled out from that cell
+      const forced = new Map();   // `${r},${c}` → value (ô này PHẢI là val)
+      const ruled  = new Map();   // `${r},${c},${v}` → true (số v bị loại khỏi ô đó)
+
+      const queue = [];
+      if (assume) {
+        // Giả sử ô (startR, startC) PHẢI là startVal
+        forced.set(`${startR},${startC}`, startVal);
+        queue.push({ r: startR, c: startC, val: startVal, isForced: true });
+      } else {
+        // Giả sử ô (startR, startC) KHÔNG phải startVal
+        ruled.set(`${startR},${startC},${startVal}`, true);
+        queue.push({ r: startR, c: startC, val: startVal, isForced: false });
+      }
+
+      let steps = 0;
+      while (queue.length > 0 && steps < 200) {
+        steps++;
+        const item = queue.shift();
+
+        if (item.isForced) {
+          // Ô này bắt buộc = item.val → loại item.val khỏi tất cả ô cùng hàng/cột/khối
+          for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+              if (r === item.r && c === item.c) continue;
+              if (this.currentBoard[r][c] !== 0) continue;
+              if (!sees({ r, c }, { r: item.r, c: item.c })) continue;
+              if (candidates[r] && candidates[r][c] && candidates[r][c].includes(item.val)) {
+                const rk = `${r},${c},${item.val}`;
+                if (!ruled.has(rk)) {
+                  ruled.set(rk, true);
+                  // Kiểm tra nếu chỉ còn 1 ứng viên trong ô → ép buộc
+                  const remaining = (candidates[r][c] || []).filter(v => !ruled.has(`${r},${c},${v}`));
+                  if (remaining.length === 1 && !forced.has(`${r},${c}`)) {
+                    forced.set(`${r},${c}`, remaining[0]);
+                    queue.push({ r, c, val: remaining[0], isForced: true });
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          // Số item.val bị loại khỏi ô (item.r, item.c)
+          // Kiểm tra nếu trong hàng/cột/khối còn đúng 1 chỗ đặt item.val → ép buộc
+          const groups = [
+            Array.from({ length: 9 }, (_, c) => ({ r: item.r, c })),
+            Array.from({ length: 9 }, (_, r) => ({ r, c: item.c })),
+            (() => {
+              const br = Math.floor(item.r / 3) * 3;
+              const bc = Math.floor(item.c / 3) * 3;
+              const cells = [];
+              for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++) cells.push({ r: br + dr, c: bc + dc });
+              return cells;
+            })()
+          ];
+          for (const group of groups) {
+            const eligible = group.filter(p => {
+              if (this.currentBoard[p.r][p.c] !== 0) return false;
+              if (!candidates[p.r] || !candidates[p.r][p.c]) return false;
+              if (!candidates[p.r][p.c].includes(item.val)) return false;
+              if (ruled.has(`${p.r},${p.c},${item.val}`)) return false;
+              return true;
+            });
+            if (eligible.length === 1 && !forced.has(`${eligible[0].r},${eligible[0].c}`)) {
+              const ep = eligible[0];
+              forced.set(`${ep.r},${ep.c}`, item.val);
+              queue.push({ r: ep.r, c: ep.c, val: item.val, isForced: true });
+            }
+          }
+        }
+      }
+
+      return { forced, ruled };
+    };
+
+    // Tìm các ô có 2 ứng viên (bivalue) làm điểm bắt đầu Forcing Chain ngắn nhất
+    const bivalueCells = [];
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r] && candidates[r][c] && candidates[r][c].length === 2) {
+          bivalueCells.push({ r, c, cands: [...candidates[r][c]] });
+        }
+      }
+    }
+
+    const foundSigs = new Set();
+
+    for (const pivot of bivalueCells) {
+      const [v1, v2] = pivot.cands;
+      // Thử v1 và v2 — kết quả forced/ruled từ cả 2 nhánh
+      const branch1 = traceConsequences(pivot.r, pivot.c, v1, true);
+      const branch2 = traceConsequences(pivot.r, pivot.c, v2, true);
+
+      // Nếu cả 2 nhánh đều "rule out" cùng 1 số khỏi cùng 1 ô → loại bỏ chắc chắn
+      const commonRuled = [];
+      branch1.ruled.forEach((_, key) => {
+        if (branch2.ruled.has(key)) {
+          const [rStr, cStr, vStr] = key.split(',');
+          const r = parseInt(rStr), c = parseInt(cStr), v = parseInt(vStr);
+          const sol = this.getSolution();
+          if (v === digit && this.currentBoard[r][c] === 0 && (r !== pivot.r || c !== pivot.c)) {
+            if (sol && sol[r][c] === v) return; // Không bao giờ loại trừ đáp án chuẩn
+            if (candidates[r] && candidates[r][c] && candidates[r][c].includes(v)) {
+              commonRuled.push({ r, c });
+            }
+          }
+        }
+      });
+
+      if (commonRuled.length > 0) {
+        const sig = `fc-${pivot.r},${pivot.c}-${digit}-${commonRuled.map(e => `${e.r},${e.c}`).sort().join(';')}`;
+        if (!foundSigs.has(sig)) {
+          foundSigs.add(sig);
+          results.push({
+            id: sig,
+            digit,
+            type: 'kaitun',
+            subtype: 'forcing-chain',
+            name: `⚡ Kaitun Forcing Chain tại (${pivot.r + 1},${pivot.c + 1})`,
+            difficulty: 'Ác Mộng (Nightmare)',
+            badge: '⚡ Forcing Chain',
+            chainNodes: [pivot],
+            baseCells: [{ r: pivot.r, c: pivot.c }],
+            eliminatedCells: commonRuled,
+            confirmedCells: [],
+            explanation: `Ô (${pivot.r + 1},${pivot.c + 1}) chỉ có thể là [${v1}] hoặc [${v2}]. Dù chọn nào, số ${digit} ở ${commonRuled.length} ô đều bị loại! → Áp dụng an toàn 100% mà không cần đoán.`
+          });
+        }
+      }
+
+      // Nếu cả 2 nhánh đều force cùng 1 giá trị vào cùng 1 ô → xác nhận đáp án
+      const commonForced = [];
+      branch1.forced.forEach((val1, key) => {
+        const val2 = branch2.forced.get(key);
+        if (val2 !== undefined && val1 === val2) {
+          const [rStr, cStr] = key.split(',');
+          const r = parseInt(rStr), c = parseInt(cStr);
+          const sol = this.getSolution();
+          if (this.currentBoard[r][c] === 0 && (r !== pivot.r || c !== pivot.c)) {
+            if (!sol || sol[r][c] === val1) {
+              commonForced.push({ r, c, val: val1 });
+            }
+          }
+        }
+      });
+
+      for (const cf of commonForced) {
+        if (cf.val !== digit) continue;
+        const sig2 = `fc-confirm-${pivot.r},${pivot.c}-${digit}-${cf.r},${cf.c}`;
+        if (!foundSigs.has(sig2)) {
+          foundSigs.add(sig2);
+          results.push({
+            id: sig2,
+            digit,
+            type: 'kaitun',
+            subtype: 'forcing-chain-confirm',
+            name: `🔒 Kaitun Xác Nhận Đáp Án: (${cf.r + 1},${cf.c + 1}) = ${digit}`,
+            difficulty: 'Ác Mộng (Nightmare)',
+            badge: '🔒 Forcing Confirm',
+            chainNodes: [pivot, { r: cf.r, c: cf.c }],
+            baseCells: [{ r: pivot.r, c: pivot.c }],
+            eliminatedCells: [],
+            confirmedCells: [{ r: cf.r, c: cf.c, val: digit }],
+            explanation: `Ô (${pivot.r + 1},${pivot.c + 1}) dù là [${v1}] hay [${v2}], đều bắt buộc ô (${cf.r + 1},${cf.c + 1}) = ${digit}! → Điền ngay không cần đắn đo!`
+          });
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * ⚡ BẺ KHÓA KAITUN TRỰC TIẾP:
+   * Loại bỏ các số bị triệt tiêu khỏi các ô đích và mở khóa nước đi tiếp theo
+   */
+  applyKaitunElimination(formula) {
+    if (!formula) return;
+    const digit = formula.digit;
+
+    // ---- TRƯỜNG HỢP ĐẶC BIỆT: FORCING CHAIN CONFIRM → Điền thẳng đáp án ----
+    if (formula.subtype === 'forcing-chain-confirm' && formula.confirmedCells && formula.confirmedCells.length > 0) {
+      const cf = formula.confirmedCells[0];
+      this.selectCell(cf.r, cf.c);
+      if (this.currentBoard[cf.r][cf.c] === 0) {
+        this.inputNumber(cf.val);
+        this.playSound('complete');
+        this.showToast(`🔒 Forcing Chain xác nhận: Ô (${cf.r + 1},${cf.c + 1}) = ${cf.val}! Đã điền!`, 'valid');
+        setTimeout(() => { this.updateTacticalRadar(); this.activeRadarFormula = null; this.renderBoard(); }, 600);
+      }
+      return;
+    }
+
+    if (!formula.eliminatedCells || formula.eliminatedCells.length === 0) return;
+
+    // Khởi tạo manualCandidates nếu chưa có
+    if (!this.manualCandidates || this.manualCandidates.length !== 9) {
+      this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    }
+
+    let hasAnyNotes = false;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.manualCandidates[r][c].length > 0) { hasAnyNotes = true; break; }
+      }
+      if (hasAnyNotes) break;
+    }
+
+    if (!hasAnyNotes) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (this.currentBoard[r][c] === 0) {
+            this.manualCandidates[r][c] = SudokuSolver.getCandidates(this.currentBoard, r, c);
+          }
+        }
+      }
+    }
+
+    // Loại trừ số digit ở các ô bị triệt tiêu
+    formula.eliminatedCells.forEach(cell => {
+      const idx = this.manualCandidates[cell.r][cell.c].indexOf(digit);
+      if (idx !== -1) {
+        this.manualCandidates[cell.r][cell.c].splice(idx, 1);
+      }
+      this.triggerCellFeedback(cell.r, cell.c, false);
+    });
+
+    this.playSound('correct');
+    const subtypeLabel = formula.subtype === 'forcing-chain' ? '⚡ Forcing Chain'
+      : formula.subtype === 'xy-chain' ? '⚡ XY-Chain'
+      : `⚡ Kaitun ${formula.chainNodes ? formula.chainNodes.length : ''}Mắt Xích`;
+    this.showToast(`${subtypeLabel}: Triệt tiêu số ${digit} ở ${formula.eliminatedCells.length} ô!`, 'valid');
+
+    // Thu thập các ô Naked Single vừa được mở khóa
+    const unlockedCells = [];
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && this.manualCandidates[r][c].length === 1) {
+          unlockedCells.push({ r, c, val: this.manualCandidates[r][c][0] });
+        }
+      }
+    }
+
+    if (unlockedCells.length > 0) {
+      const first = unlockedCells[0];
+      setTimeout(() => {
+        this.selectCell(first.r, first.c);
+        if (unlockedCells.length === 1) {
+          this.showToast(`🔥 Mở khóa: Ô (${first.r + 1},${first.c + 1}) = ${first.val}! Nhấn số ${first.val} để điền.`, 'valid');
+        } else {
+          this.showToast(`🔥 Mở khóa ${unlockedCells.length} ô! Bắt đầu: (${first.r + 1},${first.c + 1}) = ${first.val}.`, 'valid');
+        }
+        this.playSound('complete');
+      }, 500);
+    }
+
+    this.activeRadarFormula = null;
+    this.renderBoard();
+    // Cập nhật lại danh sách công thức sau bẻ khóa
+    setTimeout(() => { this.updateTacticalRadar(); }, 350);
+  }
+
+  /**
+   * Hiển thị thông báo nhanh dạng Toast nổi góc màn hình
+   */
+  showToast(msg, type = 'info') {
+    this.setStatus(msg, type === 'error' ? 'conflict' : 'valid');
+    let toast = document.getElementById('global-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'global-toast';
+      toast.style.position = 'fixed';
+      toast.style.bottom = '24px';
+      toast.style.right = '24px';
+      toast.style.padding = '10px 18px';
+      toast.style.background = 'rgba(15, 23, 42, 0.95)';
+      toast.style.border = '1px solid #f59e0b';
+      toast.style.borderRadius = '10px';
+      toast.style.color = '#fef08a';
+      toast.style.fontWeight = '700';
+      toast.style.fontSize = '0.85rem';
+      toast.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.6), 0 0 12px rgba(245, 158, 11, 0.35)';
+      toast.style.zIndex = '99999';
+      toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    if (this._toastTimeout) clearTimeout(this._toastTimeout);
+    this._toastTimeout = setTimeout(() => {
+      if (toast) {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+      }
+    }, 3500);
+  }
+
+  /**
+   * Cập nhật trạng thái nút bật/tắt nhanh Kaitun trên thanh công cụ
+   */
+  updateQuickKaitunUI() {
+    if (this.dom.btnQuickToggleKaitun) {
+      this.dom.btnQuickToggleKaitun.classList.toggle('active', this.kaitunModeEnabled);
+      this.dom.btnQuickToggleKaitun.classList.toggle('inactive', !this.kaitunModeEnabled);
+      if (this.dom.quickKaitunLabel) {
+        this.dom.quickKaitunLabel.textContent = `Kaitun: ${this.kaitunModeEnabled ? 'BẬT' : 'TẮT'}`;
+      } else {
+        this.dom.btnQuickToggleKaitun.textContent = `⚡ Kaitun: ${this.kaitunModeEnabled ? 'BẬT' : 'TẮT'}`;
+      }
+    }
+  }
+
+  /**
+   * Chuyển đổi bật/tắt nhanh chế độ Kaitun suy luận
+   */
+  toggleKaitunMode() {
+    this.kaitunModeEnabled = !this.kaitunModeEnabled;
+    localStorage.setItem('sudoku_kaitun_mode', String(this.kaitunModeEnabled));
+    this.updateQuickKaitunUI();
+    if (this.dom.toggleKaitunMode) {
+      this.dom.toggleKaitunMode.checked = this.kaitunModeEnabled;
+    }
+    this.playSound('click');
+    if (!this.kaitunModeEnabled) {
+      this.clearKaitunInference();
+      this.showToast('⚡ Đã TẮT chế độ Kaitun suy luận', 'info');
+    } else {
+      this.showToast('⚡ Đã BẬT chế độ Kaitun suy luận (Ấn ô trống hoặc số để xem)', 'valid');
+      if (this.selectedCell) {
+        this.triggerKaitunInference(this.selectedCell.row, this.selectedCell.col);
+      }
+    }
+  }
+
+  /**
+   * Thiết lập các nút chuyển đổi bố cục (Ẩn/Hiện cột Trái/Phải, Chế độ Zen tập trung & Menu Dropdown)
+   */
+  _initLayoutAndToolbarToggles() {
+    const mainWrapper = document.querySelector('.main-wrapper');
+    const btnToggleLeft = document.getElementById('btn-toggle-left-panel');
+    const btnCollapseLeft = document.getElementById('btn-collapse-left-panel');
+    const btnToggleRight = document.getElementById('btn-toggle-right-panel');
+    const btnCollapseRight = document.getElementById('btn-collapse-right-panel');
+    const btnZen = document.getElementById('btn-zen-mode');
+
+    // Khôi phục trạng thái thu gọn từ localStorage
+    if (localStorage.getItem('sudo9ku_left_collapsed') === '1' && mainWrapper) {
+      mainWrapper.classList.add('left-collapsed');
+      if (btnToggleLeft) btnToggleLeft.classList.remove('active');
+    }
+    if (localStorage.getItem('sudo9ku_right_collapsed') === '1' && mainWrapper) {
+      mainWrapper.classList.add('right-collapsed');
+      if (btnToggleRight) btnToggleRight.classList.remove('active');
+    }
+    // Chế độ Tập trung (Zen Mode) mặc định: BẬT (trừ khi người dùng chủ động bấm tắt và lưu '0')
+    const isZenMode = localStorage.getItem('sudo9ku_zen_mode') !== '0';
+    if (isZenMode && mainWrapper) {
+      mainWrapper.classList.add('zen-mode');
+      if (btnZen) btnZen.classList.add('active');
+    } else if (mainWrapper) {
+      mainWrapper.classList.remove('zen-mode');
+      if (btnZen) btnZen.classList.remove('active');
+    }
+
+    const toggleLeft = () => {
+      if (!mainWrapper) return;
+      const isCollapsed = mainWrapper.classList.toggle('left-collapsed');
+      if (btnToggleLeft) btnToggleLeft.classList.toggle('active', !isCollapsed);
+      localStorage.setItem('sudo9ku_left_collapsed', isCollapsed ? '1' : '0');
+      this.playSound('click');
+      window.dispatchEvent(new Event('resize'));
+    };
+
+    const toggleRight = () => {
+      if (!mainWrapper) return;
+      const isCollapsed = mainWrapper.classList.toggle('right-collapsed');
+      if (btnToggleRight) btnToggleRight.classList.toggle('active', !isCollapsed);
+      localStorage.setItem('sudo9ku_right_collapsed', isCollapsed ? '1' : '0');
+      this.playSound('click');
+      window.dispatchEvent(new Event('resize'));
+    };
+
+    const toggleZen = () => {
+      if (!mainWrapper) return;
+      const isZen = mainWrapper.classList.toggle('zen-mode');
+      if (btnZen) btnZen.classList.toggle('active', isZen);
+      localStorage.setItem('sudo9ku_zen_mode', isZen ? '1' : '0');
+      this.playSound('click');
+      window.dispatchEvent(new Event('resize'));
+    };
+
+    if (btnToggleLeft) btnToggleLeft.addEventListener('click', toggleLeft);
+    if (btnCollapseLeft) btnCollapseLeft.addEventListener('click', toggleLeft);
+    if (btnToggleRight) btnToggleRight.addEventListener('click', toggleRight);
+    if (btnCollapseRight) btnCollapseRight.addEventListener('click', toggleRight);
+    if (btnZen) btnZen.addEventListener('click', toggleZen);
+
+    // Dropdown Chế độ chơi nâng cao
+    const btnModesDropdown = document.getElementById('btn-toggle-modes-dropdown');
+    const menuModes = document.getElementById('modes-dropdown-menu');
+    const btnSettingsDropdown = document.getElementById('btn-toggle-settings-dropdown');
+    const menuSettings = document.getElementById('settings-dropdown-menu');
+
+    if (btnModesDropdown && menuModes) {
+      btnModesDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = menuModes.style.display !== 'none';
+        menuModes.style.display = isOpen ? 'none' : 'flex';
+        if (menuSettings) menuSettings.style.display = 'none';
+      });
+      menuModes.addEventListener('click', () => {
+        menuModes.style.display = 'none';
+      });
+    }
+
+    if (btnSettingsDropdown && menuSettings) {
+      btnSettingsDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = menuSettings.style.display !== 'none';
+        menuSettings.style.display = isOpen ? 'none' : 'flex';
+        if (menuModes) menuModes.style.display = 'none';
+      });
+      menuSettings.addEventListener('click', () => {
+        menuSettings.style.display = 'none';
+      });
+    }
+
+    document.addEventListener('click', () => {
+      if (menuModes) menuModes.style.display = 'none';
+      if (menuSettings) menuSettings.style.display = 'none';
+    });
+
+    // Nút thu gọn / mở rộng bảng suy luận Kaitun HUD
+    const btnToggleKaitunHud = document.getElementById('btn-toggle-kaitun-hud') || this.dom.btnToggleKaitunHud;
+    if (btnToggleKaitunHud && this.dom.kaitunReasoningBanner) {
+      const isSavedCollapsed = localStorage.getItem('sudo9ku_hud_collapsed') === '1';
+      if (isSavedCollapsed) {
+        this.dom.kaitunReasoningBanner.classList.add('collapsed');
+        btnToggleKaitunHud.textContent = '+ Mở rộng';
+        btnToggleKaitunHud.title = 'Mở rộng chi tiết giải thích';
+      } else {
+        btnToggleKaitunHud.textContent = '− Thu gọn';
+        btnToggleKaitunHud.title = 'Thu gọn bảng để nhìn thoáng bàn cờ';
+      }
+
+      btnToggleKaitunHud.addEventListener('click', () => {
+        const isCollapsed = this.dom.kaitunReasoningBanner.classList.toggle('collapsed');
+        btnToggleKaitunHud.textContent = isCollapsed ? '+ Mở rộng' : '− Thu gọn';
+        btnToggleKaitunHud.title = isCollapsed ? 'Mở rộng chi tiết giải thích' : 'Thu gọn bảng để nhìn thoáng bàn cờ';
+        localStorage.setItem('sudo9ku_hud_collapsed', isCollapsed ? '1' : '0');
+      });
+    }
+  }
+
+  /**
+   * Kích hoạt suy luận Kaitun cho ô (row, col)
+   */
+  triggerKaitunInference(row, col) {
+    if (!this.kaitunModeEnabled) return;
+    if (row < 0 || row >= 9 || col < 0 || col >= 9) return;
+
+    if (this._kaitunTimerId) {
+      clearInterval(this._kaitunTimerId);
+      this._kaitunTimerId = null;
+    }
+
+    const cellVal = this.currentBoard[row][col];
+    let formula = null;
+
+    if (cellVal === 0) {
+      formula = this.deduceEasiestFormulaForCell(row, col);
+    } else {
+      formula = this.deduceEasiestFormulaForDigit(cellVal);
+    }
+
+    if (!formula) {
+      this.clearKaitunInference();
+      return;
+    }
+
+    this._activeKaitunFormula = formula;
+    this.activeRadarFormula = formula;
+    this.renderBoard();
+
+    if (this.dom.kaitunReasoningBanner) {
+      this.dom.kaitunReasoningBanner.style.display = 'block';
+
+      // Đồng bộ nhãn nút Thu gọn / Mở rộng
+      const btnToggle = this.dom.btnToggleKaitunHud || document.getElementById('btn-toggle-kaitun-hud');
+      if (btnToggle) {
+        const isCollapsed = this.dom.kaitunReasoningBanner.classList.contains('collapsed');
+        btnToggle.textContent = isCollapsed ? '+ Mở rộng' : '− Thu gọn';
+        btnToggle.title = isCollapsed ? 'Mở rộng chi tiết giải thích' : 'Thu gọn bảng để nhìn thoáng bàn cờ';
+      }
+
+      if (this.dom.kaitunHudName) this.dom.kaitunHudName.textContent = formula.name;
+      if (this.dom.kaitunHudBadge) {
+        this.dom.kaitunHudBadge.textContent = formula.diffBadge || '🟢 Dễ';
+        this.dom.kaitunHudBadge.className = `kaitun-diff-pill ${
+          formula.type === 'kaitun' ? 'diff-kaitun' :
+          formula.difficulty === 'Nâng cao' || formula.difficulty === 'Chuyên gia' ? 'diff-expert' :
+          formula.difficulty === 'Khá' ? 'diff-hard' :
+          formula.difficulty === 'Trung bình' ? 'diff-medium' : 'diff-easy'
+        }`;
+      }
+
+      if (this.dom.kaitunTargetCoords) {
+        if (formula.targetCell && formula.targetCell.r !== undefined) {
+          this.dom.kaitunTargetCoords.textContent = `(Hàng ${formula.targetCell.r + 1}, Cột ${formula.targetCell.c + 1})`;
+        } else {
+          this.dom.kaitunTargetCoords.textContent = `(Hàng ${row + 1}, Cột ${col + 1})`;
+        }
+      }
+
+      if (this.dom.kaitunTargetVal) {
+        if (formula.isGuidance) {
+          this.dom.kaitunTargetVal.textContent = 'Chưa chốt';
+          this.dom.kaitunTargetVal.className = 'kaitun-val-pill pill-guidance';
+        } else {
+          this.dom.kaitunTargetVal.textContent = (formula.targetCell && formula.targetCell.value !== undefined)
+            ? formula.targetCell.value
+            : (formula.digit || '?');
+          this.dom.kaitunTargetVal.className = 'kaitun-val-pill';
+        }
+      }
+
+      if (this.dom.kaitunSelfFillNotice) {
+        if (formula.isGuidance && formula.suggestedCell) {
+          this.dom.kaitunSelfFillNotice.innerHTML = `
+            <span>💡 Nước đi dễ nhất:</span>
+            <button id="btn-jump-suggested" class="btn-jump-suggested" type="button">
+              👉 Nhảy tới Ô (${formula.suggestedCell.r + 1}, ${formula.suggestedCell.c + 1}) = Số ${formula.suggestedCell.value}
+            </button>
+          `;
+          const btnJump = document.getElementById('btn-jump-suggested');
+          if (btnJump) {
+            btnJump.onclick = () => {
+              this.selectCell(formula.suggestedCell.r, formula.suggestedCell.c);
+            };
+          }
+        } else if (formula.digit) {
+          this.dom.kaitunSelfFillNotice.innerHTML = `✍️ <em>Hãy bấm <strong>Số ${formula.digit}</strong> trên bàn phím để điền vào ô này!</em>`;
+        } else {
+          this.dom.kaitunSelfFillNotice.innerHTML = `✍️ <em>Bạn hãy tự bấm số trên bàn phím để điền vào ô này!</em>`;
+        }
+      }
+
+      if (this.dom.kaitunHudLogic) {
+        this.dom.kaitunHudLogic.textContent = formula.logic || formula.explanation || '';
+      }
+      if (this.dom.kaitunHudVisual) {
+        this.dom.kaitunHudVisual.textContent = formula.visual || '';
+      }
+    }
+
+    this._drawMultiFormulasOverlay([formula]);
+    this.updateInspector();
+
+    if (this.kaitunDuration > 0) {
+      this._kaitunSecondsLeft = this.kaitunDuration;
+      if (this.dom.kaitunHudTimer) {
+        this.dom.kaitunHudTimer.textContent = `⏳ ${this._kaitunSecondsLeft}s`;
+      }
+      this._kaitunTimerId = setInterval(() => {
+        this._kaitunSecondsLeft--;
+        if (this.dom.kaitunHudTimer) {
+          this.dom.kaitunHudTimer.textContent = `⏳ ${this._kaitunSecondsLeft}s`;
+        }
+        if (this._kaitunSecondsLeft <= 0) {
+          this.clearKaitunInference();
+        }
+      }, 1000);
+    } else {
+      if (this.dom.kaitunHudTimer) {
+        this.dom.kaitunHudTimer.textContent = '♾️ Thủ công';
+      }
+    }
+  }
+
+  /**
+   * Kích hoạt suy luận Kaitun cho một chữ số (1 - 9)
+   */
+  triggerKaitunDigitInference(digit) {
+    if (!this.kaitunModeEnabled) return;
+    if (!digit || digit < 1 || digit > 9) return;
+
+    if (this._kaitunTimerId) {
+      clearInterval(this._kaitunTimerId);
+      this._kaitunTimerId = null;
+    }
+
+    const formula = this.deduceEasiestFormulaForDigit(digit);
+    if (!formula) {
+      this.clearKaitunInference();
+      return;
+    }
+
+    this._activeKaitunFormula = formula;
+    this.activeRadarFormula = formula;
+    this.renderBoard();
+
+    if (this.dom.kaitunReasoningBanner) {
+      this.dom.kaitunReasoningBanner.style.display = 'block';
+
+      // Đồng bộ nhãn nút Thu gọn / Mở rộng
+      const btnToggle = this.dom.btnToggleKaitunHud || document.getElementById('btn-toggle-kaitun-hud');
+      if (btnToggle) {
+        const isCollapsed = this.dom.kaitunReasoningBanner.classList.contains('collapsed');
+        btnToggle.textContent = isCollapsed ? '+ Mở rộng' : '− Thu gọn';
+        btnToggle.title = isCollapsed ? 'Mở rộng chi tiết giải thích' : 'Thu gọn bảng để nhìn thoáng bàn cờ';
+      }
+
+      if (this.dom.kaitunHudName) this.dom.kaitunHudName.textContent = formula.name;
+      if (this.dom.kaitunHudBadge) {
+        this.dom.kaitunHudBadge.textContent = formula.diffBadge || '🟢 Dễ';
+        this.dom.kaitunHudBadge.className = `kaitun-diff-pill ${
+          formula.type === 'kaitun' ? 'diff-kaitun' :
+          formula.difficulty === 'Nâng cao' || formula.difficulty === 'Chuyên gia' ? 'diff-expert' :
+          formula.difficulty === 'Khá' ? 'diff-hard' :
+          formula.difficulty === 'Trung bình' ? 'diff-medium' : 'diff-easy'
+        }`;
+      }
+
+      if (this.dom.kaitunTargetCoords) {
+        if (formula.targetCell && formula.targetCell.r !== undefined) {
+          this.dom.kaitunTargetCoords.textContent = `(Hàng ${formula.targetCell.r + 1}, Cột ${formula.targetCell.c + 1})`;
+        } else {
+          this.dom.kaitunTargetCoords.textContent = `Số ${digit}`;
+        }
+      }
+
+      if (this.dom.kaitunTargetVal) {
+        if (formula.type === 'completed') {
+          this.dom.kaitunTargetVal.textContent = '9/9 Đủ';
+          this.dom.kaitunTargetVal.className = 'kaitun-val-pill';
+        } else if (formula.type === 'single' && formula.targetCell) {
+          this.dom.kaitunTargetVal.textContent = `Điền ${digit}!`;
+          this.dom.kaitunTargetVal.className = 'kaitun-val-pill';
+        } else {
+          this.dom.kaitunTargetVal.textContent = formula.targetCell?.value || digit;
+          this.dom.kaitunTargetVal.className = 'kaitun-val-pill';
+        }
+      }
+
+      if (this.dom.kaitunSelfFillNotice) {
+        if (formula.type === 'single' && formula.targetCell) {
+          this.dom.kaitunSelfFillNotice.innerHTML = `✍️ <em>Hãy bấm <strong>Số ${digit}</strong> để điền vào ô (Hàng ${formula.targetCell.r + 1}, Cột ${formula.targetCell.c + 1})!</em>`;
+        } else if (formula.type === 'completed') {
+          this.dom.kaitunSelfFillNotice.innerHTML = `🎉 <em>Số ${digit} đã hoàn thành, hãy chọn số khác!</em>`;
+        } else {
+          this.dom.kaitunSelfFillNotice.innerHTML = `✍️ <em>Bạn hãy tự bấm số trên bàn phím để điền!</em>`;
+        }
+      }
+
+      if (this.dom.kaitunHudLogic) {
+        this.dom.kaitunHudLogic.textContent = formula.logic || formula.explanation || '';
+      }
+      if (this.dom.kaitunHudVisual) {
+        this.dom.kaitunHudVisual.textContent = formula.visual || '';
+      }
+    }
+
+    this._drawMultiFormulasOverlay([formula]);
+    this.updateInspector();
+
+    if (this.kaitunDuration > 0) {
+      this._kaitunSecondsLeft = this.kaitunDuration;
+      if (this.dom.kaitunHudTimer) {
+        this.dom.kaitunHudTimer.textContent = `⏳ ${this._kaitunSecondsLeft}s`;
+      }
+      this._kaitunTimerId = setInterval(() => {
+        this._kaitunSecondsLeft--;
+        if (this.dom.kaitunHudTimer) {
+          this.dom.kaitunHudTimer.textContent = `⏳ ${this._kaitunSecondsLeft}s`;
+        }
+        if (this._kaitunSecondsLeft <= 0) {
+          this.clearKaitunInference();
+        }
+      }, 1000);
+    } else {
+      if (this.dom.kaitunHudTimer) {
+        this.dom.kaitunHudTimer.textContent = '♾️ Thủ công';
+      }
+    }
+  }
+
+  /**
+   * Xóa sạch trạng thái suy luận Kaitun và ẩn HUD/tia sáng
+   */
+  clearKaitunInference() {
+    if (this._kaitunTimerId) {
+      clearInterval(this._kaitunTimerId);
+      this._kaitunTimerId = null;
+    }
+    this._kaitunSecondsLeft = 0;
+    this._activeKaitunFormula = null;
+    this.activeRadarFormula = null;
+    if (this.dom.kaitunReasoningBanner) {
+      this.dom.kaitunReasoningBanner.style.display = 'none';
+    }
+    this.clearRadarLaserWave();
+    this.renderBoard();
+  }
+
+  /**
+   * Mô phỏng chuỗi ép buộc khi điền sai một nhánh 50/50 để tìm ra chính xác ô bị bế tắc (0 ứng viên)
+   */
+  _findBifurcationContradiction(row, col, wrongVal) {
+    const b = this.currentBoard.map(r => [...r]);
+    b[row][col] = wrongVal;
+    for (let iter = 0; iter < 60; iter++) {
+      const c = SudokuSolver.getAllCandidates(b);
+      // Tìm ô bị triệt tiêu toàn bộ số
+      for (let r = 0; r < 9; r++) {
+        for (let cIdx = 0; cIdx < 9; cIdx++) {
+          if (b[r][cIdx] === 0 && c[r][cIdx].length === 0) {
+            return { conflictCell: { r, c: cIdx }, desc: `Ô (Hàng ${r + 1}, Cột ${cIdx + 1})` };
+          }
+        }
+      }
+      let filled = false;
+      // Naked singles
+      for (let r = 0; r < 9; r++) {
+        for (let cIdx = 0; cIdx < 9; cIdx++) {
+          if (b[r][cIdx] === 0 && c[r][cIdx].length === 1) {
+            b[r][cIdx] = c[r][cIdx][0];
+            filled = true;
+            break;
+          }
+        }
+        if (filled) break;
+      }
+      if (filled) continue;
+      // Hidden singles
+      for (let d = 1; d <= 9; d++) {
+        for (let u = 0; u < 9; u++) {
+          let spots = [];
+          for (let cIdx = 0; cIdx < 9; cIdx++) if (b[u][cIdx] === 0 && c[u][cIdx].includes(d)) spots.push(cIdx);
+          if (spots.length === 1) { b[u][spots[0]] = d; filled = true; break; }
+        }
+        if (filled) break;
+        for (let u = 0; u < 9; u++) {
+          let spots = [];
+          for (let rIdx = 0; rIdx < 9; rIdx++) if (b[rIdx][u] === 0 && c[rIdx][u].includes(d)) spots.push(rIdx);
+          if (spots.length === 1) { b[spots[0]][u] = d; filled = true; break; }
+        }
+        if (filled) break;
+        for (let box = 0; box < 9; box++) {
+          const br = Math.floor(box / 3) * 3, bc = (box % 3) * 3;
+          let spots = [];
+          for (let r = br; r < br + 3; r++) {
+            for (let cIdx = bc; cIdx < bc + 3; cIdx++) {
+              if (b[r][cIdx] === 0 && c[r][cIdx].includes(d)) spots.push({ r, col: cIdx });
+            }
+          }
+          if (spots.length === 1) { b[spots[0].r][spots[0].col] = d; filled = true; break; }
+        }
+        if (filled) break;
+      }
+      if (!filled) break;
+    }
+    return null;
+  }
+
+  /**
+   * Phân tích và tìm công thức DỄ NHẤT ĐẾN KHÓ NHẤT cho ô (row, col)
+   */
+  deduceEasiestFormulaForCell(row, col) {
+    const candidates = SudokuSolver.getAllCandidates(this.currentBoard);
+    const cellCands = candidates[row]?.[col] || [];
+    if (cellCands.length === 0) return null;
+
+    const box = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+
+    // 1. LEVEL 1: NAKED SINGLE (Ô độc thân duy nhất) - CỰC DỄ
+    if (cellCands.length === 1) {
+      const val = cellCands[0];
+      const sol = this.getSolution();
+      if (sol && sol[row][col] !== val) return null; // Sai lệch note, bỏ qua
+      const baseCells = [];
+      const seenDigits = new Set();
+
+      for (let c = 0; c < 9; c++) {
+        const v = this.currentBoard[row][c];
+        if (c !== col && v !== 0) {
+          baseCells.push({ r: row, c });
+          seenDigits.add(v);
+        }
+      }
+      for (let r = 0; r < 9; r++) {
+        const v = this.currentBoard[r][col];
+        if (r !== row && v !== 0) {
+          baseCells.push({ r, c: col });
+          seenDigits.add(v);
+        }
+      }
+      const br = Math.floor(row / 3) * 3;
+      const bc = Math.floor(col / 3) * 3;
+      for (let r = br; r < br + 3; r++) {
+        for (let c = bc; c < bc + 3; c++) {
+          const v = this.currentBoard[r][c];
+          if ((r !== row || c !== col) && v !== 0) {
+            baseCells.push({ r, c });
+            seenDigits.add(v);
+          }
+        }
+      }
+
+      const uniqueBase = Array.from(new Map(baseCells.map(p => [`${p.r},${p.c}`, p])).values());
+      const blockedList = [...seenDigits].sort((a, b) => a - b).join(', ');
+
+      return {
+        id: `naked-single-${row}-${col}-${val}`,
+        name: `Naked Single (Ô Độc Thân)`,
+        type: 'single',
+        subtype: 'naked-single',
+        difficulty: 'Dễ',
+        diffBadge: '🟢 Rất Dễ',
+        digit: val,
+        targetCell: { r: row, c: col, value: val },
+        baseCells: uniqueBase,
+        eliminatedCells: [],
+        confirmedCells: [{ r: row, c: col }],
+        logic: `Quan sát ô (${row + 1}, ${col + 1}): Hàng ${row + 1}, Cột ${col + 1} và Khối ${box + 1} đã có đủ các số: [${blockedList}]. Tất cả 8 số khác đều đã bị chặn hoàn toàn! Do đó, ô này BẮT BUỘC phải là số ${val}.`,
+        visual: `Nhìn vào các số xung quanh trên cùng hàng, cột và khối 3x3: Các tia năng lượng hội tụ khóa sạch 8 số kia. Ô (${row + 1}, ${col + 1}) là vị trí duy nhất còn lại chứa số ${val}.`
+      };
+    }
+
+    // 2. LEVEL 2: HIDDEN SINGLE (Số ẩn duy nhất) - DỄ
+    const sol = this.getSolution();
+    for (const d of cellCands) {
+      // Khối
+      let countInBox = 0;
+      const br = Math.floor(row / 3) * 3;
+      const bc = Math.floor(col / 3) * 3;
+      for (let r = br; r < br + 3; r++) {
+        for (let c = bc; c < bc + 3; c++) {
+          if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(d)) {
+            countInBox++;
+          }
+        }
+      }
+      if (countInBox === 1) {
+        if (sol && sol[row][col] !== d) continue;
+        const blockingCells = [];
+        for (let r = 0; r < 9; r++) {
+          for (let c = 0; c < 9; c++) {
+            if (this.currentBoard[r][c] === d) {
+              const inSameBox = (Math.floor(r / 3) === Math.floor(row / 3) && Math.floor(c / 3) === Math.floor(col / 3));
+              if (!inSameBox) {
+                if (r >= br && r < br + 3) blockingCells.push({ r, c });
+                if (c >= bc && c < bc + 3) blockingCells.push({ r, c });
+              }
+            }
+          }
+        }
+        return {
+          id: `hidden-single-box-${box}-${d}`,
+          name: `Hidden Single trong Khối ${box + 1}`,
+          type: 'single',
+          subtype: 'hidden-single',
+          difficulty: 'Dễ',
+          diffBadge: '🟡 Dễ',
+          digit: d,
+          targetCell: { r: row, c: col, value: d },
+          baseCells: blockingCells.length > 0 ? blockingCells : [{ r: row, c: col }],
+          eliminatedCells: [],
+          confirmedCells: [{ r: row, c: col }],
+          logic: `Trong Khối 3x3 số ${box + 1}, xét chữ số ${d}: Các ô trống khác trong khối đều đã bị các số ${d} ở các hàng/cột lân cận chiếu tia khóa chặn. Ô (${row + 1}, ${col + 1}) là vị trí DUY NHẤT trong khối còn có thể điền số ${d}!`,
+          visual: `Nhìn các số ${d} ở các hàng/cột lân cận chiếu tia ngang/dọc quét qua Khối ${box + 1}. Tất cả các ô khác trong khối bị chặn, ô (${row + 1}, ${col + 1}) là đích đến duy nhất.`
+        };
+      }
+
+      // Hàng
+      let countInRow = 0;
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[row][c] === 0 && candidates[row][c].includes(d)) countInRow++;
+      }
+      if (countInRow === 1) {
+        if (sol && sol[row][col] !== d) continue;
+        return {
+          id: `hidden-single-row-${row}-${d}`,
+          name: `Hidden Single trên Hàng ${row + 1}`,
+          type: 'single',
+          subtype: 'hidden-single',
+          difficulty: 'Dễ',
+          diffBadge: '🟡 Dễ',
+          digit: d,
+          targetCell: { r: row, c: col, value: d },
+          baseCells: [{ r: row, c: col }],
+          eliminatedCells: [],
+          confirmedCells: [{ r: row, c: col }],
+          logic: `Duyệt trên toàn bộ Hàng ${row + 1}: Chữ số ${d} chỉ có thể xuất hiện tại ô (${row + 1}, ${col + 1}). Mọi ô trống khác trên hàng đều bị các cột hoặc khối tương ứng loại trừ số ${d}!`,
+          visual: `Dò dọc theo Hàng ${row + 1}: Chỉ duy nhất ô (${row + 1}, ${col + 1}) chưa bị khóa số ${d}. Điền số ${d} vào ô này!`
+        };
+      }
+
+      // Cột
+      let countInCol = 0;
+      for (let r = 0; r < 9; r++) {
+        if (this.currentBoard[r][col] === 0 && candidates[r][col].includes(d)) countInCol++;
+      }
+      if (countInCol === 1) {
+        if (sol && sol[row][col] !== d) continue;
+        return {
+          id: `hidden-single-col-${col}-${d}`,
+          name: `Hidden Single trên Cột ${col + 1}`,
+          type: 'single',
+          subtype: 'hidden-single',
+          difficulty: 'Dễ',
+          diffBadge: '🟡 Dễ',
+          digit: d,
+          targetCell: { r: row, c: col, value: d },
+          baseCells: [{ r: row, c: col }],
+          eliminatedCells: [],
+          confirmedCells: [{ r: row, c: col }],
+          logic: `Duyệt trên toàn bộ Cột ${col + 1}: Chữ số ${d} chỉ có thể xuất hiện tại ô (${row + 1}, ${col + 1}). Mọi ô trống khác trên cột đều bị các hàng hoặc khối tương ứng loại trừ số ${d}!`,
+          visual: `Dò dọc theo Cột ${col + 1}: Chỉ duy nhất ô (${row + 1}, ${col + 1}) chưa bị khóa số ${d}. Điền số ${d} vào ô này!`
+        };
+      }
+    }
+
+    // =========================================================================
+    // ➜ Lúc này mới cần dùng đến kỹ thuật loại trừ nâng cao
+    // =========================================================================
+
+    // 3. LEVEL 3: POINTING & CLAIMING (Khóa tia ứng viên) - TRUNG BÌNH
+    for (let d = 1; d <= 9; d++) {
+      const formulas = this.scanTacticalFormulasForDigit(d);
+      for (const f of formulas) {
+        if (f.type === 'pointing' || f.type === 'claiming') {
+          const isEliminatedHere = (f.eliminatedCells || []).some(p => p.r === row && p.c === col);
+          if (isEliminatedHere) {
+            const rem = cellCands.filter(c => c !== d);
+            return {
+              id: f.id,
+              name: `${f.type === 'pointing' ? 'Khóa tia Pointing' : 'Khóa tia Claiming'}: Loại số ${d}`,
+              type: f.type,
+              difficulty: 'Trung bình',
+              diffBadge: '🟠 Trung Bình',
+              digit: d,
+              targetCell: { r: row, c: col, value: rem.length === 1 ? `Điền ${rem[0]}!` : `Loại ${d}` },
+              baseCells: f.baseCells,
+              eliminatedCells: f.eliminatedCells,
+              confirmedCells: rem.length === 1 ? [{ r: row, c: col }] : [],
+              logic: `Thế ${f.name}: Cặp số ${d} nằm thẳng hàng trong bệ phóng màu vàng đã khóa hướng đi, loại bỏ ứng viên ${d} khỏi ô (${row + 1}, ${col + 1}).` +
+                     (rem.length === 1 ? `\n✨ Sau khi loại số ${d}, ô này CHỈ CÒN DUY NHẤT Số ${rem[0]} ➜ Điền số ${rem[0]}!` : `\nÔ này còn lại các số: [${rem.join(', ')}].`),
+              visual: `Nhìn từ các ô bệ phóng màu vàng: Tia quét chiếu thẳng qua ô (${row + 1}, ${col + 1}), loại bỏ khả năng là số ${d}.`
+            };
+          }
+        }
+      }
+    }
+
+    // 4. LEVEL 4: SUBSETS (Naked/Hidden Pairs/Triples) - KHÁ
+    for (let d = 1; d <= 9; d++) {
+      const formulas = this.scanTacticalFormulasForDigit(d);
+      for (const f of formulas) {
+        if (f.type === 'pair' || f.type === 'triple') {
+          const isElimHere = (f.eliminatedCells || []).some(p => p.r === row && p.c === col);
+          if (isElimHere) {
+            const rem = cellCands.filter(c => c !== d);
+            return {
+              id: f.id,
+              name: `${f.name}: Loại số ${d}`,
+              type: f.type,
+              difficulty: 'Khá',
+              diffBadge: '🔵 Khá',
+              digit: d,
+              targetCell: { r: row, c: col, value: rem.length === 1 ? `Điền ${rem[0]}!` : `Loại ${d}` },
+              baseCells: f.baseCells,
+              eliminatedCells: f.eliminatedCells,
+              confirmedCells: rem.length === 1 ? [{ r: row, c: col }] : [],
+              logic: `Bộ số độc quyền ${f.name}: Các ô bệ phóng đã chiếm giữ nhóm số này, loại bỏ ứng viên ${d} khỏi ô (${row + 1}, ${col + 1}).` +
+                     (rem.length === 1 ? `\n✨ Sau khi loại số ${d}, ô này CHỈ CÒN DUY NHẤT Số ${rem[0]} ➜ Điền số ${rem[0]}!` : `\nÔ này còn lại các số: [${rem.join(', ')}].`),
+              visual: `Quan sát các ô bệ phóng màu vàng đang giam giữ bộ số, loại bỏ ứng viên ${d} ở ô (${row + 1}, ${col + 1}).`
+            };
+          }
+        }
+      }
+    }
+
+    // 5. LEVEL 5: X-WING & SKYSCRAPER - NÂNG CAO
+    for (let d = 1; d <= 9; d++) {
+      const formulas = this.scanTacticalFormulasForDigit(d);
+      for (const f of formulas) {
+        if (f.type === 'x-wing' || f.type === 'skyscraper') {
+          const isElimHere = (f.eliminatedCells || []).some(p => p.r === row && p.c === col);
+          if (isElimHere) {
+            const rem = cellCands.filter(c => c !== d);
+            return {
+              id: f.id,
+              name: `${f.name}: Loại số ${d}`,
+              type: f.type,
+              difficulty: 'Nâng cao',
+              diffBadge: '🟣 Nâng Cao',
+              digit: d,
+              targetCell: { r: row, c: col, value: rem.length === 1 ? `Điền ${rem[0]}!` : `Loại ${d}` },
+              baseCells: f.baseCells,
+              eliminatedCells: f.eliminatedCells,
+              confirmedCells: rem.length === 1 ? [{ r: row, c: col }] : [],
+              logic: `Mô hình ${f.name}: 4 góc tạo thành khung chữ nhật đối xứng, triệt tiêu số ${d} khỏi ô (${row + 1}, ${col + 1}).` +
+                     (rem.length === 1 ? `\n✨ Sau khi loại số ${d}, ô này CHỈ CÒN DUY NHẤT Số ${rem[0]} ➜ Điền số ${rem[0]}!` : `\nÔ này còn lại các số: [${rem.join(', ')}].`),
+              visual: `Nhìn 4 góc khung bệ phóng màu vàng giao thoa triệt tiêu số ${d} tại ô (${row + 1}, ${col + 1}).`
+            };
+          }
+        }
+      }
+    }
+
+    // 6. LEVEL 6: KAITUN CHAINS & FORCING CHAINS - TỐI THƯỢNG
+    for (let d = 1; d <= 9; d++) {
+      const forcings = this.findKaitunForcingChains(d, candidates);
+      const confirms = forcings.filter(f => f.subtype === 'forcing-chain-confirm');
+      for (const cf of confirms) {
+        const isTarget = cf.confirmedCells && cf.confirmedCells.some(p => p.r === row && p.c === col);
+        if (isTarget) {
+          return {
+            id: cf.id,
+            name: `⚡ Kaitun Forcing Chain ➜ Điền số ${d}`,
+            type: 'kaitun',
+            subtype: 'forcing-chain-confirm',
+            difficulty: 'Tối thượng',
+            diffBadge: '⚡ Kaitun',
+            digit: d,
+            targetCell: { r: row, c: col, value: d },
+            baseCells: cf.baseCells,
+            eliminatedCells: [],
+            confirmedCells: [{ r: row, c: col }],
+            chainNodes: cf.chainNodes || [],
+            logic: `Chuỗi dây chuyền Domino phản ứng kép: Dù ô (${cf.baseCells[0].r + 1}, ${cf.baseCells[0].c + 1}) nhận bất kỳ giá trị nào, chuỗi suy luận phân nhánh đều dẫn đến kết quả ô (${row + 1}, ${col + 1}) BẮT BUỘC phải là số ${d}!`,
+            visual: `Theo dõi chuỗi mắt xích liên kết phát sáng từ ô gốc truyền dẫn năng lượng ép ô (${row + 1}, ${col + 1}) phải chốt số ${d}.`
+          };
+        }
+      }
+
+      const chains = [...this.findKaitunChains(d, candidates), ...this.findKaitunXYChains(d, candidates), ...forcings.filter(f => f.subtype !== 'forcing-chain-confirm')];
+      for (const ch of chains) {
+        const isElim = ch.eliminatedCells && ch.eliminatedCells.some(p => p.r === row && p.c === col);
+        if (isElim) {
+          const rem = cellCands.filter(c => c !== d);
+          return {
+            id: ch.id,
+            name: `⚡ Kaitun Chain: Loại số ${d}`,
+            type: 'kaitun',
+            difficulty: 'Tối thượng',
+            diffBadge: '⚡ Kaitun',
+            digit: d,
+            targetCell: { r: row, c: col, value: rem.length === 1 ? `Điền ${rem[0]}!` : `Loại ${d}` },
+            baseCells: ch.baseCells,
+            eliminatedCells: ch.eliminatedCells,
+            confirmedCells: rem.length === 1 ? [{ r: row, c: col }] : [],
+            chainNodes: ch.chainNodes || [],
+            logic: (ch.explanation || `Chuỗi dây chuyền Kaitun triệt tiêu số ${d} khỏi ô (${row + 1}, ${col + 1}).`) +
+                   (rem.length === 1 ? `\n✨ Sau khi loại số ${d}, ô này CHỈ CÒN DUY NHẤT Số ${rem[0]} ➜ Điền số ${rem[0]}!` : `\nÔ này còn lại các số: [${rem.join(', ')}].`),
+            visual: `Quan sát chuỗi mắt xích Domino liên kết dẫn truyền tạo gọng kìm triệt tiêu số ${d} ở ô (${row + 1}, ${col + 1}).`
+          };
+        }
+      }
+    }
+
+    // 7. LEVEL 7: HƯỚNG DẪN Ô ĐỘT PHÁ DỄ HƠN TRÊN BÀN CỜ (Guidance Mode)
+    // Nếu trên bàn cờ vẫn còn các ô giải được trực tiếp (Naked/Hidden Single), luôn ưu tiên chỉ sang ô dễ
+    // thay vì ép người chơi phải nhẩm chuỗi phản chứng 50/50 phức tạp!
+    const nextGlobalMove = this.findEasiestMoveOnBoard(candidates);
+    if (nextGlobalMove && nextGlobalMove.targetCell && (nextGlobalMove.targetCell.r !== row || nextGlobalMove.targetCell.c !== col)) {
+      return {
+        id: `fallback-cand-${row}-${col}`,
+        name: `Ô (${row + 1}, ${col + 1}) Chưa Nên Giải Vội`,
+        type: 'analysis',
+        difficulty: 'Trung bình',
+        diffBadge: '💡 Gợi Ý Đột Phá',
+        digit: nextGlobalMove.digit,
+        isGuidance: true,
+        suggestedCell: { r: nextGlobalMove.targetCell.r, c: nextGlobalMove.targetCell.c, value: nextGlobalMove.digit },
+        targetCell: { r: row, c: col, value: `[${cellCands.join(', ')}]` },
+        baseCells: [{ r: nextGlobalMove.targetCell.r, c: nextGlobalMove.targetCell.c }],
+        eliminatedCells: [],
+        confirmedCells: [],
+        logic: `Ô (${row + 1}, ${col + 1}) hiện có ${cellCands.length} ứng viên: [${cellCands.join(', ')}] và chưa có cách nhìn trực tiếp.\n💡 Đừng vội đoán mò! Trên bàn cờ đang có nước đi dễ hơn rất nhiều: ${nextGlobalMove.name}. Hãy giải ô đó trước để mở khóa dần!`,
+        visual: `Quan sát ô (${nextGlobalMove.targetCell.r + 1}, ${nextGlobalMove.targetCell.c + 1}) đang phát sáng dạ quang: Hãy giải quyết ô này trước!`
+      };
+    }
+
+    // 8. LEVEL 8: BẺ KHÓA THẾ BÍ 50/50 BẰNG PHẢN CHỨNG (Chỉ khi toàn bộ bàn cờ đã bế tắc 100%)
+    if (cellCands.length === 2) {
+      const sol = this.getSolution();
+      if (sol && cellCands.includes(sol[row][col])) {
+        const trueVal = sol[row][col];
+        const falseVal = cellCands.find(c => c !== trueVal);
+
+        // Thu thập các ô số chặn (các số đã xuất hiện trên cùng hàng, cột và khối)
+        const baseCells = [];
+        const seenDigits = new Set();
+        for (let c = 0; c < 9; c++) {
+          const v = this.currentBoard[row][c];
+          if (c !== col && v !== 0) { baseCells.push({ r: row, c }); seenDigits.add(v); }
+        }
+        for (let r = 0; r < 9; r++) {
+          const v = this.currentBoard[r][col];
+          if (r !== row && v !== 0) { baseCells.push({ r, c: col }); seenDigits.add(v); }
+        }
+        const br = Math.floor(row / 3) * 3;
+        const bc = Math.floor(col / 3) * 3;
+        for (let r = br; r < br + 3; r++) {
+          for (let c = bc; c < bc + 3; c++) {
+            const v = this.currentBoard[r][c];
+            if ((r !== row || c !== col) && v !== 0) { baseCells.push({ r, c }); seenDigits.add(v); }
+          }
+        }
+        const uniqueBase = Array.from(new Map(baseCells.map(p => [`${p.r},${p.c}`, p])).values());
+        const blockedList = [...seenDigits].sort((a, b) => a - b).join(', ');
+
+        // Tìm chính xác điểm mâu thuẫn trên bàn cờ khi thử điền nhánh sai
+        const conflict = this._findBifurcationContradiction(row, col, falseVal);
+        const conflictText = conflict
+          ? `\n2. Bước 2 (Điểm mâu thuẫn thực tế): Nếu thử điền số ${falseVal}, chuỗi ép buộc sẽ làm ô (Hàng ${conflict.conflictCell.r + 1}, Cột ${conflict.conflictCell.c + 1}) bị triệt tiêu sạch số (0 ứng viên hợp lệ)!`
+          : `\n2. Bước 2 (Phản chứng): Giả định thử điền số ${falseVal}, chuỗi suy luận lan truyền dẫn tới mâu thuẫn bế tắc cờ (không thể giải tiếp).`;
+
+        return {
+          id: `bifurcation-breaker-${row}-${col}-${trueVal}`,
+          name: `⚡ Bẻ Khóa Thế Bí 50/50: Điền số ${trueVal}`,
+          type: 'single',
+          subtype: 'bifurcation-breaker',
+          difficulty: 'Tối thượng',
+          diffBadge: '⚡ 50/50 Phản Chứng',
+          digit: trueVal,
+          falseVal: falseVal,
+          targetCell: { r: row, c: col, value: trueVal },
+          baseCells: uniqueBase,
+          eliminatedCells: conflict ? [conflict.conflictCell] : [],
+          confirmedCells: [{ r: row, c: col }],
+          logic: `Ô (${row + 1}, ${col + 1}) đang vào thế bí 50/50 giữa [${falseVal}] và [${trueVal}].\n1. Bước 1 (Khóa số): Hàng ${row + 1}, Cột ${col + 1} và Khối ${box + 1} đã có 7 số [${blockedList}] ➜ Loại sạch chỉ còn đúng 2 ứng viên: [${falseVal}, ${trueVal}].${conflictText}\n➜ KẾT LUẬN: Ô (${row + 1}, ${col + 1}) BẮT BUỘC 100% phải điền số ${trueVal}!`,
+          visual: conflict
+            ? `Nhìn vào ô đỏ (Hàng ${conflict.conflictCell.r + 1}, Cột ${conflict.conflictCell.c + 1}) có biểu tượng 💥 0 SỐ: Đó là điểm bế tắc nếu chọn số ${falseVal}. Do đó chốt số ${trueVal}!`
+            : `Quan sát các ô viền vàng xung quanh đang phong tỏa các số [${blockedList}]. Nhánh số ${falseVal} đã bị phản chứng triệt tiêu hoàn toàn, chốt số ${trueVal}!`
+        };
+      }
+    }
+
+    return {
+      id: `info-cand-${row}-${col}`,
+      name: `Ứng Viên Khả Dĩ Ô (${row + 1}, ${col + 1})`,
+      type: 'analysis',
+      difficulty: 'Dễ',
+      diffBadge: '🔍 Phân Tích',
+      digit: cellCands[0],
+      targetCell: { r: row, c: col, value: `[${cellCands.join(', ')}]` },
+      baseCells: [],
+      eliminatedCells: [],
+      confirmedCells: [],
+      logic: `Ô (${row + 1}, ${col + 1}) hiện có các ứng viên: [${cellCands.join(', ')}]. Hãy dùng Bút chì ghi chú hoặc kiểm tra các ô xung quanh để tìm thêm điểm đột phá!`,
+      visual: `Quan sát hàng ${row + 1}, cột ${col + 1} và khối ${box + 1} để loại dần các ứng viên còn lại.`
+    };
+  }
+
+  /**
+   * Phân tích và tìm công thức DỄ NHẤT ĐẾN KHÓ NHẤT cho con số `digit`
+   */
+  deduceEasiestFormulaForDigit(digit) {
+    const candidates = SudokuSolver.getAllCandidates(this.currentBoard);
+
+    if (this.isDigitCompleted(digit)) {
+      return {
+        id: `digit-completed-${digit}`,
+        name: `Số ${digit} Đã Hoàn Thành Đủ 9/9`,
+        type: 'completed',
+        difficulty: 'Dễ',
+        diffBadge: '🎉 Xong',
+        digit,
+        targetCell: { r: 0, c: 0, value: '9/9' },
+        baseCells: [],
+        eliminatedCells: [],
+        confirmedCells: [],
+        logic: `Tất cả 9 ô số ${digit} trên bàn cờ đã được điền chính xác. Bạn hãy chuyển sang số khác!`,
+        visual: `Số ${digit} đã phủ kín 9 khối 3x3.`
+      };
+    }
+
+    // 1. Hidden Single cho digit trong 9 khối (Box 1..9)
+    for (let b = 0; b < 9; b++) {
+      const br = Math.floor(b / 3) * 3;
+      const bc = (b % 3) * 3;
+      const possibleCells = [];
+      for (let r = br; r < br + 3; r++) {
+        for (let c = bc; c < bc + 3; c++) {
+          if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+            possibleCells.push({ r, c });
+          }
+        }
+      }
+      if (possibleCells.length === 1) {
+        const target = possibleCells[0];
+        const sol = this.getSolution();
+        if (sol && sol[target.r][target.c] !== digit) continue;
+        const blockingCells = [];
+        for (let r = 0; r < 9; r++) {
+          for (let c = 0; c < 9; c++) {
+            if (this.currentBoard[r][c] === digit) {
+              const inSameBox = (Math.floor(r / 3) === Math.floor(target.r / 3) && Math.floor(c / 3) === Math.floor(target.c / 3));
+              if (!inSameBox) {
+                if (r >= br && r < br + 3) blockingCells.push({ r, c });
+                if (c >= bc && c < bc + 3) blockingCells.push({ r, c });
+              }
+            }
+          }
+        }
+        return {
+          id: `digit-hidden-box-${b}-${digit}`,
+          name: `Hidden Single Số ${digit} trong Khối ${b + 1}`,
+          type: 'single',
+          subtype: 'hidden-single',
+          difficulty: 'Dễ',
+          diffBadge: '🟡 Dễ',
+          digit,
+          targetCell: { r: target.r, c: target.c, value: digit },
+          baseCells: blockingCells.length > 0 ? blockingCells : [target],
+          eliminatedCells: [],
+          confirmedCells: [target],
+          logic: `Trong Khối 3x3 số ${b + 1}, số ${digit} chỉ có thể điền vào ô (${target.r + 1}, ${target.c + 1}). Mọi vị trí khác trong khối đều đã bị các số ${digit} lân cận chiếu tia khóa chặn!`,
+          visual: `Nhìn các số ${digit} ở hàng/cột xung quanh chiếu tia qua Khối ${b + 1}. Ô (${target.r + 1}, ${target.c + 1}) là vị trí duy nhất còn lại chứa số ${digit}!`
+        };
+      }
+    }
+
+    // 2. Hidden Single trong Hàng
+    for (let r = 0; r < 9; r++) {
+      const possibleCells = [];
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+          possibleCells.push({ r, c });
+        }
+      }
+      if (possibleCells.length === 1) {
+        const target = possibleCells[0];
+        const sol = this.getSolution();
+        if (sol && sol[target.r][target.c] !== digit) continue;
+        return {
+          id: `digit-hidden-row-${r}-${digit}`,
+          name: `Hidden Single Số ${digit} trên Hàng ${r + 1}`,
+          type: 'single',
+          subtype: 'hidden-single',
+          difficulty: 'Dễ',
+          diffBadge: '🟡 Dễ',
+          digit,
+          targetCell: { r: target.r, c: target.c, value: digit },
+          baseCells: [target],
+          eliminatedCells: [],
+          confirmedCells: [target],
+          logic: `Trên Hàng ${r + 1}, chỉ có duy nhất ô (${target.r + 1}, ${target.c + 1}) có thể chứa số ${digit}. Điền số ${digit} vào ô này!`,
+          visual: `Dò từ trái sang phải trên Hàng ${r + 1}: Ô (${target.r + 1}, ${target.c + 1}) là vị trí duy nhất hợp lệ cho số ${digit}.`
+        };
+      }
+    }
+
+    // 3. Hidden Single trong Cột
+    for (let c = 0; c < 9; c++) {
+      const possibleCells = [];
+      for (let r = 0; r < 9; r++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit)) {
+          possibleCells.push({ r, c });
+        }
+      }
+      if (possibleCells.length === 1) {
+        const target = possibleCells[0];
+        const sol = this.getSolution();
+        if (sol && sol[target.r][target.c] !== digit) continue;
+        return {
+          id: `digit-hidden-col-${c}-${digit}`,
+          name: `Hidden Single Số ${digit} trên Cột ${c + 1}`,
+          type: 'single',
+          subtype: 'hidden-single',
+          difficulty: 'Dễ',
+          diffBadge: '🟡 Dễ',
+          digit,
+          targetCell: { r: target.r, c: target.c, value: digit },
+          baseCells: [target],
+          eliminatedCells: [],
+          confirmedCells: [target],
+          logic: `Trên Cột ${c + 1}, chỉ có duy nhất ô (${target.r + 1}, ${target.c + 1}) có thể chứa số ${digit}. Điền số ${digit} vào ô này!`,
+          visual: `Dò từ trên xuống dưới trên Cột ${c + 1}: Ô (${target.r + 1}, ${target.c + 1}) là vị trí duy nhất hợp lệ cho số ${digit}.`
+        };
+      }
+    }
+
+    // 4. Pointing / Claiming cho digit
+    const formulas = this.scanTacticalFormulasForDigit(digit);
+    for (const f of formulas) {
+      if (f.type === 'pointing' || f.type === 'claiming') {
+        return {
+          id: f.id,
+          name: `${f.type === 'pointing' ? 'Khóa tia Pointing' : 'Khóa tia Claiming'}: Số ${digit}`,
+          type: f.type,
+          difficulty: 'Trung bình',
+          diffBadge: '🟠 Trung Bình',
+          digit,
+          targetCell: f.eliminatedCells[0] ? { r: f.eliminatedCells[0].r, c: f.eliminatedCells[0].c, value: `Loại số ${digit}` } : { r: 0, c: 0, value: '' },
+          baseCells: f.baseCells,
+          eliminatedCells: f.eliminatedCells,
+          confirmedCells: [],
+          logic: `Thế ${f.name}: Cặp số ${digit} trong bệ phóng màu vàng ép số ${digit} gióng thẳng hàng, tạo tia triệt tiêu số ${digit} ở các ô đỏ!`,
+          visual: `Nhìn từ bệ phóng màu vàng phóng tia đỏ loại bỏ ứng viên ${digit} ở các ô giao thoa.`
+        };
+      }
+    }
+
+    // 5. X-Wing / Skyscraper
+    for (const f of formulas) {
+      if (f.type === 'x-wing' || f.type === 'skyscraper') {
+        return {
+          id: f.id,
+          name: f.name,
+          type: f.type,
+          difficulty: 'Nâng cao',
+          diffBadge: '🟣 Nâng Cao',
+          digit,
+          targetCell: f.eliminatedCells[0] ? { r: f.eliminatedCells[0].r, c: f.eliminatedCells[0].c, value: `Loại số ${digit}` } : { r: 0, c: 0, value: '' },
+          baseCells: f.baseCells,
+          eliminatedCells: f.eliminatedCells,
+          confirmedCells: [],
+          logic: f.explanation,
+          visual: `Nhìn 4 góc bệ phóng vàng tạo lưới đòn bẩy triệt tiêu số ${digit}.`
+        };
+      }
+    }
+
+    // 6. Kaitun Chain / Forcing Chain
+    for (const f of formulas) {
+      if (f.type === 'kaitun') {
+        return {
+          id: f.id,
+          name: f.name,
+          type: 'kaitun',
+          difficulty: 'Tối thượng',
+          diffBadge: '⚡ Kaitun',
+          digit,
+          targetCell: (f.confirmedCells && f.confirmedCells[0]) || (f.eliminatedCells && f.eliminatedCells[0]) || { r: 0, c: 0, value: '' },
+          baseCells: f.baseCells,
+          eliminatedCells: f.eliminatedCells || [],
+          confirmedCells: f.confirmedCells || [],
+          chainNodes: f.chainNodes || [],
+          logic: f.explanation,
+          visual: `Theo dõi chuỗi Domino liên kết luân phiên bẻ gãy thế bí của số ${digit}.`
+        };
+      }
+    }
+
+    // 6b. HƯỚNG DẪN Ô ĐỘT PHÁ DỄ HƠN TRÊN BÀN CỜ (Guidance Mode)
+    // Nếu trên bàn cờ đang có nước đi dễ hơn (Hidden Single của số khác), ưu tiên hướng dẫn người chơi
+    const nextGlobalMove = this.findEasiestMoveOnBoard(candidates);
+    if (nextGlobalMove && nextGlobalMove.targetCell && nextGlobalMove.digit !== digit) {
+      return {
+        id: `digit-guidance-${digit}`,
+        name: `Số ${digit} Chưa Nên Giải Vội`,
+        type: 'analysis',
+        difficulty: 'Trung bình',
+        diffBadge: '💡 Gợi Ý Đột Phá',
+        digit: nextGlobalMove.digit,
+        isGuidance: true,
+        suggestedCell: { r: nextGlobalMove.targetCell.r, c: nextGlobalMove.targetCell.c, value: nextGlobalMove.digit },
+        targetCell: nextGlobalMove.targetCell,
+        baseCells: [{ r: nextGlobalMove.targetCell.r, c: nextGlobalMove.targetCell.c }],
+        eliminatedCells: [],
+        confirmedCells: [],
+        logic: `Số ${digit} hiện chưa có vị trí điền trực tiếp rõ ràng. Để tránh phải đoán mò hay suy luận phản chứng phức tạp, bạn hãy giải nước đi dễ nhất bàn cờ trước: ${nextGlobalMove.name}.`,
+        visual: `Quan sát ô (${nextGlobalMove.targetCell.r + 1}, ${nextGlobalMove.targetCell.c + 1}) đang phát sáng dạ quang: Hãy bấm vào ô này để mở khóa thế cờ!`
+      };
+    }
+
+    // 6c. BẺ KHÓA THẾ BÍ 50/50 CHO SỐ DIGIT (Chỉ khi toàn bộ bàn cờ đã hết sạch nước đi dễ)
+    const sol = this.getSolution();
+    if (sol) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(digit) && candidates[r][c].length === 2) {
+            const isTargetDigit = (sol[r][c] === digit);
+            const otherVal = candidates[r][c].find(v => v !== digit);
+            const correctVal = isTargetDigit ? digit : otherVal;
+            const wrongVal = isTargetDigit ? otherVal : digit;
+
+            // Thu thập các ô số chặn (các số đã xuất hiện trên cùng hàng, cột và khối)
+            const baseCells = [];
+            const seenDigits = new Set();
+            for (let colIdx = 0; colIdx < 9; colIdx++) {
+              const v = this.currentBoard[r][colIdx];
+              if (colIdx !== c && v !== 0) { baseCells.push({ r, c: colIdx }); seenDigits.add(v); }
+            }
+            for (let rowIdx = 0; rowIdx < 9; rowIdx++) {
+              const v = this.currentBoard[rowIdx][c];
+              if (rowIdx !== r && v !== 0) { baseCells.push({ r: rowIdx, c }); seenDigits.add(v); }
+            }
+            const br = Math.floor(r / 3) * 3;
+            const bc = Math.floor(c / 3) * 3;
+            for (let rIdx = br; rIdx < br + 3; rIdx++) {
+              for (let cIdx = bc; cIdx < bc + 3; cIdx++) {
+                const v = this.currentBoard[rIdx][cIdx];
+                if ((rIdx !== r || cIdx !== c) && v !== 0) { baseCells.push({ r: rIdx, c: cIdx }); seenDigits.add(v); }
+              }
+            }
+            const uniqueBase = Array.from(new Map(baseCells.map(p => [`${p.r},${p.c}`, p])).values());
+            const blockedList = [...seenDigits].sort((a, b) => a - b).join(', ');
+            const boxIdx = Math.floor(r / 3) * 3 + Math.floor(c / 3) + 1;
+
+            // Tìm chính xác điểm mâu thuẫn trên bàn cờ khi thử điền nhánh sai
+            const conflict = this._findBifurcationContradiction(r, c, wrongVal);
+            const conflictText = conflict
+              ? `\n2. Bước 2 (Điểm mâu thuẫn thực tế): Nếu thử điền số ${wrongVal}, chuỗi ép buộc sẽ làm ô (Hàng ${conflict.conflictCell.r + 1}, Cột ${conflict.conflictCell.c + 1}) bị triệt tiêu sạch số (0 ứng viên hợp lệ)!`
+              : `\n2. Bước 2 (Phản chứng): Giả định chọn số ${wrongVal}, chuỗi suy luận lan truyền dẫn tới mâu thuẫn bế tắc cờ (không có lời giải).`;
+
+            return {
+              id: `digit-5050-${r}-${c}-${correctVal}`,
+              name: `⚡ Bẻ Khóa Thế Bí 50/50: Điền Số ${correctVal}`,
+              type: 'single',
+              subtype: 'bifurcation-breaker',
+              difficulty: 'Ác Mộng (Nightmare)',
+              diffBadge: '⚡ 50/50 Phản Chứng',
+              digit: correctVal,
+              falseVal: wrongVal,
+              targetCell: { r, c, value: correctVal },
+              baseCells: uniqueBase,
+              eliminatedCells: conflict ? [conflict.conflictCell] : [],
+              confirmedCells: [{ r, c, val: correctVal }],
+              logic: `Ô (${r + 1}, ${c + 1}) đang ở thế bí 50/50 giữa [${correctVal}] và [${wrongVal}].\n1. Bước 1 (Khóa số): Hàng ${r + 1}, Cột ${c + 1} và Khối ${boxIdx} đã có 7 số [${blockedList}] ➜ Loại trừ chỉ còn đúng 2 ứng viên: [${wrongVal}, ${correctVal}].${conflictText}\n➜ KẾT LUẬN: Ô (${r + 1}, ${c + 1}) BẮT BUỘC 100% là số ${correctVal}!`,
+              visual: conflict
+                ? `Nhìn vào ô đỏ (Hàng ${conflict.conflictCell.r + 1}, Cột ${conflict.conflictCell.c + 1}) có biểu tượng 💥 0 SỐ: Đó là điểm bế tắc nếu chọn số ${wrongVal}. Do đó chốt số ${correctVal}!`
+                : `Quan sát các ô viền vàng xung quanh đang phong tỏa các số [${blockedList}]. Nhánh sai [${wrongVal}] đã bị phản chứng triệt tiêu, chốt số ${correctVal}!`
+            };
+          }
+        }
+      }
+    }
+
+    return {
+      id: `digit-scattered-${digit}`,
+      name: `Số ${digit} Chưa Xuất Hiện Thế Đòn Bẩy`,
+      type: 'info',
+      difficulty: 'Dễ',
+      diffBadge: '💡 Mẹo',
+      digit,
+      targetCell: { r: 0, c: 0, value: 'Chưa có' },
+      baseCells: [],
+      eliminatedCells: [],
+      confirmedCells: [],
+      logic: `Các số ${digit} hiện tại đang rải rác và chưa tạo thành thế đòn bẩy trực tiếp. Bạn hãy thử bấm số khác hoặc chọn các ô trống có ít ứng viên để phân tích trước!`,
+      visual: `Quan sát các số ${digit} đang có trên bàn cờ.`
+    };
+  }
+
+  /**
+   * Tìm nước đi dễ nhất tiếp theo trên toàn bàn cờ (Singles -> Pointing)
+   */
+  findEasiestMoveOnBoard(candidates) {
+    const sol = this.getSolution();
+
+    // 1. Naked Singles (kiểm chứng lời giải chính xác)
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].length === 1) {
+          const val = candidates[r][c][0];
+          if (!sol || sol[r][c] === val) {
+            return {
+              name: `Naked Single tại (${r + 1}, ${c + 1}) = ${val}`,
+              targetCell: { r, c },
+              digit: val
+            };
+          }
+        }
+      }
+    }
+
+    // 2. Hidden Singles trong Box
+    for (let d = 1; d <= 9; d++) {
+      if (this.isDigitCompleted(d)) continue;
+      for (let b = 0; b < 9; b++) {
+        const br = Math.floor(b / 3) * 3;
+        const bc = (b % 3) * 3;
+        const matching = [];
+        for (let r = br; r < br + 3; r++) {
+          for (let c = bc; c < bc + 3; c++) {
+            if (this.currentBoard[r][c] === 0 && candidates[r][c].includes(d)) {
+              matching.push({ r, c });
+            }
+          }
+        }
+        if (matching.length === 1) {
+          const tgt = matching[0];
+          if (!sol || sol[tgt.r][tgt.c] === d) {
+            return {
+              name: `Hidden Single số ${d} trong Khối ${b + 1} tại (${tgt.r + 1}, ${tgt.c + 1})`,
+              targetCell: tgt,
+              digit: d
+            };
+          }
+        }
+      }
+    }
+
+    // 3. Pointing / Claiming
+    for (let d = 1; d <= 9; d++) {
+      const formulas = this.scanTacticalFormulasForDigit(d);
+      for (const f of formulas) {
+        if (f.type === 'pointing' || f.type === 'claiming') {
+          return {
+            name: `${f.name}`,
+            targetCell: f.eliminatedCells[0] || f.baseCells[0],
+            digit: d
+          };
+        }
+      }
+    }
+
+    // 4. BẺ KHÓA THẾ BÍ 50/50: Khi hết Singles/Pointing, tìm ô có 2 ứng viên chính xác
+    let best5050 = null;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r][c].length === 2) {
+          if (sol && candidates[r][c].includes(sol[r][c])) {
+            best5050 = { r, c, val: sol[r][c] };
+            break;
+          }
+        }
+      }
+      if (best5050) break;
+    }
+    if (best5050) {
+      return {
+        name: `Bẻ khóa thế bí 50/50 tại (${best5050.r + 1}, ${best5050.c + 1}) = ${best5050.val}`,
+        targetCell: { r: best5050.r, c: best5050.c },
+        digit: best5050.val
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * ⚡ KAITUN CASCADE ENGINE:
+   * Thu thập TẤT CẢ công thức từ 9 số cùng lúc → vẽ tất cả tia vàng→đỏ đồng thời
+   * → áp dụng tất cả loại bỏ → điền Singles vừa mở → lặp cascade
+   */
+  triggerKaitunAutoResolve() {
+    this.playSound('step');
+    if (this._kaitunPending) {
+      this._kaitunApplyPending();
+      return;
+    }
+    this._kaitunScanAndShow();
+  }
+
+  _kaitunScanAndShow() {
+    if (this.isBoardComplete()) { this.showToast('Bảng đã hoàn thành!', 'valid'); return; }
+    if (!this.manualCandidates || this.manualCandidates.length !== 9)
+      this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    let hasNotes = false;
+    outer: for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) { if (this.manualCandidates[r][c].length > 0) { hasNotes = true; break outer; } }
+    const candidates = SudokuSolver.getAllCandidates(this.currentBoard);
+    if (!hasNotes) {
+      for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0) this.manualCandidates[r][c] = [...(candidates[r]?.[c] || [])];
+      }
+    }
+    const sol = this.getSolution();
+    const singleFills = [];
+    for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+      if (this.currentBoard[r][c] !== 0) continue;
+      const cands = this.manualCandidates[r][c] || [];
+      if (cands.length === 1 && (!sol || sol[r][c] === cands[0])) {
+        singleFills.push({ r, c, val: cands[0], reason: 'Naked Single' });
+      }
+    }
+    for (let d = 1; d <= 9; d++) {
+      const h = this._findHiddenSingleFromNotes(d);
+      if (h && !singleFills.some(f => f.r === h.r && f.c === h.c))
+        singleFills.push({ r: h.r, c: h.c, val: d, reason: 'Hidden Single' });
+    }
+    if (singleFills.length > 0) {
+      this._drawMultiFormulasOverlay(singleFills.map(f => ({
+        type: 'single-confirm', baseCells: [{ r: f.r, c: f.c }], eliminatedCells: [],
+        confirmedCells: [{ r: f.r, c: f.c, val: f.val }], digit: f.val,
+        labelText: `${f.reason}: ô (${f.r+1},${f.c+1})=${f.val}`, explanation: f.reason
+      })));
+      this._kaitunPending = { phase: 'singles', data: singleFills };
+      const desc = singleFills.map(f => `• ${f.reason}: Ô (${f.r+1},${f.c+1}) = ${f.val}`).join('\n');
+      this._showKaitunDescPanel(`📋 Phase 1 — ${singleFills.length} Singles tìm thấy\n${desc}\n\n⚡ Nhấn lại để điền tất cả!`);
+      this._updateKaitunBtn('⚡ Điền Singles!', '#22c55e');
+      return;
+    }
+    for (let d = 1; d <= 9; d++) {
+      const forcings = this.findKaitunForcingChains(d, candidates);
+      const confirms = forcings.filter(f => f.subtype === 'forcing-chain-confirm');
+      if (confirms.length > 0) {
+        const cf = confirms[0].confirmedCells[0];
+        this._drawMultiFormulasOverlay([confirms[0]]);
+        this._kaitunPending = { phase: 'confirm', data: { r: cf.r, c: cf.c, val: d, formula: confirms[0] } };
+        this._showKaitunDescPanel(`🔒 Phase 2 — Forcing Chain Confirm\n• Ô (${confirms[0].baseCells[0]?.r+1},${confirms[0].baseCells[0]?.c+1}) dù là số nào\n  → ô (${cf.r+1},${cf.c+1}) BẮT BUỘC = ${d}\n• ${confirms[0].explanation || ''}\n\n⚡ Nhấn lại để điền!`);
+        this._updateKaitunBtn(`🔒 Điền (${cf.r+1},${cf.c+1})=${d}!`, '#16a34a');
+        return;
+      }
+    }
+    const allElimFormulas = [];
+    for (let d = 1; d <= 9; d++) {
+      const forcings = this.findKaitunForcingChains(d, candidates);
+      [...this.findKaitunChains(d, candidates), ...this.findKaitunXYChains(d, candidates),
+       ...forcings.filter(f => f.subtype === 'forcing-chain')].forEach(f => allElimFormulas.push(f));
+      this.scanTacticalFormulasForDigit(d).filter(f =>
+        f.type !== 'completed' && f.type !== 'single' && f.eliminatedCells?.length > 0
+      ).forEach(f => allElimFormulas.push(f));
+    }
+    if (allElimFormulas.length === 0) {
+      // Bẻ khóa thế bí 50/50 bằng phản chứng
+      let best5050 = null;
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (this.currentBoard[r][c] === 0) {
+            const cands = this.manualCandidates[r][c]?.length > 0 ? this.manualCandidates[r][c] : candidates[r][c];
+            if (cands.length === 2 && sol && cands.includes(sol[r][c])) {
+              best5050 = { r, c, val: sol[r][c], falseVal: cands.find(x => x !== sol[r][c]) };
+              break;
+            }
+          }
+        }
+        if (best5050) break;
+      }
+      if (best5050) {
+        const { r, c, val, falseVal } = best5050;
+        const breakerFormula = {
+          id: `bifurcation-breaker-${r}-${c}`,
+          name: `⚡ Bẻ Khóa Thế Bí 50/50`,
+          type: 'single-confirm',
+          subtype: 'bifurcation-breaker',
+          baseCells: [{ r, c }],
+          eliminatedCells: [],
+          confirmedCells: [{ r, c, val }],
+          digit: val,
+          labelText: `50/50: ô (${r+1},${c+1})=${val}`,
+          explanation: `Bẻ khóa thế bí 50/50 bằng phản chứng: Nhánh số ${falseVal} dẫn đến mâu thuẫn, do đó ô (${r+1},${c+1}) phải là số ${val}!`
+        };
+        this._drawMultiFormulasOverlay([breakerFormula]);
+        this._kaitunPending = { phase: 'confirm', data: { r, c, val, formula: breakerFormula } };
+        this._showKaitunDescPanel(`⚡ Bẻ Khóa Thế Bí 50/50 Bằng Phản Chứng\n• Ô (${r+1},${c+1}) phân nhánh 50/50 giữa [${falseVal}, ${val}]\n• Phản chứng: Nhánh ${falseVal} dẫn tới bế tắc bàn cờ\n➜ Ô (${r+1},${c+1}) BẮT BUỘC = ${val}!\n\n⚡ Nhấn lại để điền!`);
+        this._updateKaitunBtn(`⚡ Bẻ khóa (${r+1},${c+1})=${val}!`, '#16a34a');
+        return;
+      }
+
+      this.showToast('Kaitun không tìm được nước đi nào. Bảng đã đạt giới hạn.', 'info');
+      this.clearRadarLaserWave(); this._kaitunPending = null; this._updateKaitunBtn('⚡ Bật Kaitun', null);
+      return;
+    }
+    const elimMap = new Map();
+    allElimFormulas.forEach(f => {
+      (f.eliminatedCells || []).forEach(cell => {
+        const k = `${cell.r},${cell.c}`;
+        if (!elimMap.has(k)) elimMap.set(k, { r: cell.r, c: cell.c, digits: new Set() });
+        elimMap.get(k).digits.add(f.digit);
+      });
+    });
+    this._drawMultiFormulasOverlay(allElimFormulas);
+    this._kaitunPending = { phase: 'eliminations', data: { formulas: allElimFormulas, elimMap } };
+    const techSummary = {};
+    allElimFormulas.forEach(f => { techSummary[f.name] = (techSummary[f.name] || 0) + 1; });
+    const techLines = Object.entries(techSummary).map(([k, v]) => `• ${k}: ${v} lần`).join('\n');
+    const elimLines = [...elimMap.entries()].slice(0, 7).map(([k, v]) => {
+      const [r, c] = k.split(','); return `• Ô (${+r+1},${+c+1}): loại số [${[...v.digits].join(',')}]`;
+    }).join('\n') + (elimMap.size > 7 ? `\n  ...+${elimMap.size-7} ô nữa` : '');
+    this._showKaitunDescPanel(`⚡ Phase 3 — ${allElimFormulas.length} kỹ thuật\n${techLines}\n\n🔴 Loại bỏ từ ${elimMap.size} ô:\n${elimLines}\n\n⚡ Nhấn lại để áp dụng tất cả!`);
+    this._updateKaitunBtn(`⚡ Áp dụng ${allElimFormulas.length} kỹ thuật`, '#f59e0b');
+  }
+
+  _kaitunApplyPending() {
+    const pending = this._kaitunPending;
+    this._kaitunPending = null;
+    this._updateKaitunBtn('⚡ Bật Kaitun', null);
+    this._hideKaitunDescPanel();
+    if (!pending) return;
+    if (pending.phase === 'singles') {
+      pending.data.forEach(f => {
+        if (this.currentBoard[f.r][f.c] !== 0) return;
+        this.currentBoard[f.r][f.c] = f.val;
+        this.manualCandidates[f.r][f.c] = [];
+        this.triggerCellFeedback(f.r, f.c, true);
+        this._getPeers(f.r, f.c).forEach(p => {
+          const ix = this.manualCandidates[p.r]?.[p.c]?.indexOf(f.val);
+          if (ix != null && ix !== -1) this.manualCandidates[p.r][p.c].splice(ix, 1);
+        });
+      });
+      this.playSound('correct');
+      this.showToast(`✅ Đã điền ${pending.data.length} ô Singles!`, 'valid');
+    } else if (pending.phase === 'confirm') {
+      const { r, c, val } = pending.data;
+      this._kaitunFillCell(r, c, val, `🔒 Forcing Chain: Ô (${r+1},${c+1}) = ${val}! Đã điền.`);
+    } else if (pending.phase === 'eliminations') {
+      const { elimMap } = pending.data;
+      let eliminated = 0;
+      elimMap.forEach(({ r, c, digits }) => {
+        digits.forEach(d => {
+          const ix = this.manualCandidates[r]?.[c]?.indexOf(d);
+          if (ix != null && ix !== -1) { this.manualCandidates[r][c].splice(ix, 1); this.triggerCellFeedback(r, c, false); eliminated++; }
+        });
+      });
+      this.playSound('correct');
+      this.showToast(`⚡ Đã loại bỏ ${eliminated} ứng viên từ ${elimMap.size} ô!`, 'valid');
+    }
+    this.clearRadarLaserWave(); this.activeRadarFormula = null; this.renderBoard();
+    setTimeout(() => { this.updateTacticalRadar(); this._kaitunScanAndShow(); }, 600);
+  }
+
+  _showKaitunDescPanel(text) {
+    let panel = document.getElementById('kaitun-desc-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'kaitun-desc-panel';
+      panel.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(15,23,42,0.97);border:1.5px solid rgba(250,204,21,0.5);border-radius:12px;padding:14px 18px;z-index:9999;max-width:440px;width:92%;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 24px rgba(250,204,21,0.12);font-family:Inter,sans-serif;font-size:0.78rem;line-height:1.7;color:#e2e8f0;white-space:pre-line;';
+      document.body.appendChild(panel);
+    }
+    panel.textContent = text;
+    panel.style.display = 'block';
+  }
+
+  _hideKaitunDescPanel() {
+    const p = document.getElementById('kaitun-desc-panel');
+    if (p) p.style.display = 'none';
+  }
+
+  _updateKaitunBtn(text, color) {
+    const btn = this.dom.btnTriggerKaitun;
+    if (!btn) return;
+    btn.textContent = text;
+    btn.style.background = color ? `linear-gradient(135deg,${color},${color}cc)` : '';
+    btn.style.color = color ? '#fff' : '';
+  }
+
+  _kaitunCascadeStep(depth) {
+    if (depth > 30 || this.isBoardComplete()) {
+      if (this.isBoardComplete()) {
+        this.showToast('🎉 Kaitun hoàn thành bảng cờ!', 'valid');
+        this.playSound('complete');
+      }
+      return;
+    }
+
+    if (!this.manualCandidates || this.manualCandidates.length !== 9) {
+      this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    }
+    let hasAnyNotes = false;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.manualCandidates[r][c].length > 0) { hasAnyNotes = true; break; }
+      }
+      if (hasAnyNotes) break;
+    }
+
+    const candidates = SudokuSolver.getAllCandidates(this.currentBoard);
+
+    if (!hasAnyNotes) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (this.currentBoard[r][c] === 0) {
+            this.manualCandidates[r][c] = [...(candidates[r]?.[c] || [])];
+          }
+        }
+      }
+    }
+
+    // PHASE 1: Naked Single + Hidden Single - điền tất cả cùng lúc
+    const sol = this.getSolution();
+    const singleFills = [];
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] !== 0) continue;
+        const cands = this.manualCandidates[r][c] || [];
+        if (cands.length === 1 && (!sol || sol[r][c] === cands[0])) {
+          singleFills.push({ r, c, val: cands[0], reason: 'Naked Single' });
+        }
+      }
+    }
+    for (let d = 1; d <= 9; d++) {
+      const h = this._findHiddenSingleFromNotes(d);
+      if (h && !singleFills.some(f => f.r === h.r && f.c === h.c)) {
+        singleFills.push({ r: h.r, c: h.c, val: d, reason: 'Hidden Single' });
+      }
+    }
+
+    if (singleFills.length > 0) {
+      this._drawMultiFormulasOverlay(singleFills.map(f => ({
+        type: 'single-confirm', baseCells: [{ r: f.r, c: f.c }], eliminatedCells: [], digit: f.val
+      })));
+      setTimeout(() => {
+        singleFills.forEach(f => {
+          if (this.currentBoard[f.r][f.c] !== 0) return;
+          this.currentBoard[f.r][f.c] = f.val;
+          this.manualCandidates[f.r][f.c] = [];
+          this.triggerCellFeedback(f.r, f.c, true);
+          this._getPeers(f.r, f.c).forEach(p => {
+            if (this.manualCandidates[p.r]?.[p.c]) {
+              const ix = this.manualCandidates[p.r][p.c].indexOf(f.val);
+              if (ix !== -1) this.manualCandidates[p.r][p.c].splice(ix, 1);
+            }
+          });
+        });
+        this.playSound('correct');
+        this.showToast(`✅ Điền ${singleFills.length} ô Singles cùng lúc!`, 'valid');
+        this.clearRadarLaserWave();
+        this.renderBoard();
+        setTimeout(() => { this.updateTacticalRadar(); this._kaitunCascadeStep(depth + 1); }, 500);
+      }, 800);
+      return;
+    }
+
+    // PHASE 2: Forcing Chain Confirm
+    for (let d = 1; d <= 9; d++) {
+      const forcings = this.findKaitunForcingChains(d, candidates);
+      const confirms = forcings.filter(f => f.subtype === 'forcing-chain-confirm');
+      if (confirms.length > 0) {
+        const cf = confirms[0].confirmedCells[0];
+        this._drawMultiFormulasOverlay([confirms[0]]);
+        setTimeout(() => {
+          this._kaitunFillCell(cf.r, cf.c, d, `🔒 Forcing Chain: (${cf.r+1},${cf.c+1}) = ${d}!`);
+          setTimeout(() => this._kaitunCascadeStep(depth + 1), 600);
+        }, 700);
+        return;
+      }
+    }
+
+    // PHASE 3: Thu thập TẤT CẢ công thức loại bỏ từ 9 số đồng thời
+    const allElimFormulas = [];
+    for (let d = 1; d <= 9; d++) {
+      const forcings = this.findKaitunForcingChains(d, candidates);
+      const chains = [
+        ...this.findKaitunChains(d, candidates),
+        ...this.findKaitunXYChains(d, candidates),
+        ...forcings.filter(f => f.subtype === 'forcing-chain')
+      ];
+      chains.forEach(f => allElimFormulas.push(f));
+      const basic = this.scanTacticalFormulasForDigit(d).filter(f =>
+        f.type !== 'completed' && f.type !== 'single' &&
+        f.eliminatedCells && f.eliminatedCells.length > 0
+      );
+      basic.forEach(f => allElimFormulas.push(f));
+    }
+
+    if (allElimFormulas.length === 0) {
+      let best5050 = null;
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (this.currentBoard[r][c] === 0) {
+            const cands = this.manualCandidates[r][c]?.length > 0 ? this.manualCandidates[r][c] : candidates[r][c];
+            if (cands.length === 2 && sol && cands.includes(sol[r][c])) {
+              best5050 = { r, c, val: sol[r][c], falseVal: cands.find(x => x !== sol[r][c]) };
+              break;
+            }
+          }
+        }
+        if (best5050) break;
+      }
+      if (best5050) {
+        const { r, c, val, falseVal } = best5050;
+        this.currentBoard[r][c] = val;
+        this.manualCandidates[r][c] = [];
+        this.triggerCellFeedback(r, c, true);
+        this._getPeers(r, c).forEach(p => {
+          if (this.manualCandidates[p.r]?.[p.c]) {
+            const ix = this.manualCandidates[p.r][p.c].indexOf(val);
+            if (ix !== -1) this.manualCandidates[p.r][p.c].splice(ix, 1);
+          }
+        });
+        this.showToast(`⚡ Bẻ khóa 50/50: Ô (${r+1},${c+1}) = ${val}!`, 'valid');
+        this.renderBoard();
+        setTimeout(() => this._kaitunCascadeStep(depth + 1), 600);
+        return;
+      }
+
+      this.showToast('Kaitun không tìm được nước đi. Bảng đã đạt giới hạn suy luận thuần tuý.', 'info');
+      this.clearRadarLaserWave();
+      return;
+    }
+
+    // Vẽ TẤT CẢ tia vàng→đỏ của mọi công thức cùng lúc
+    this._drawMultiFormulasOverlay(allElimFormulas);
+
+    // Gộp tất cả ô bị loại bỏ
+    const elimMap = new Map();
+    allElimFormulas.forEach(f => {
+      (f.eliminatedCells || []).forEach(cell => {
+        const k = `${cell.r},${cell.c}`;
+        if (!elimMap.has(k)) elimMap.set(k, { r: cell.r, c: cell.c, digits: new Set() });
+        elimMap.get(k).digits.add(f.digit);
+      });
+    });
+
+    const totalFormulas = allElimFormulas.length;
+    const totalCells = elimMap.size;
+
+    setTimeout(() => {
+      elimMap.forEach(({ r, c, digits }) => {
+        digits.forEach(d => {
+          if (this.manualCandidates[r]?.[c]) {
+            const ix = this.manualCandidates[r][c].indexOf(d);
+            if (ix !== -1) { this.manualCandidates[r][c].splice(ix, 1); this.triggerCellFeedback(r, c, false); }
+          }
+        });
+      });
+      this.playSound('correct');
+      this.showToast(`⚡ Kaitun ${totalFormulas} kỹ thuật → loại bỏ khỏi ${totalCells} ô!`, 'valid');
+      this.clearRadarLaserWave();
+      this.activeRadarFormula = null;
+      this.renderBoard();
+      setTimeout(() => { this.updateTacticalRadar(); this._kaitunCascadeStep(depth + 1); }, 600);
+    }, 900);
+  }
+
+  _drawMultiFormulasOverlay(formulas) {
+    if (!this.dom.radarLaserOverlay) return;
+    const svg = this.dom.radarLaserOverlay;
+    const cellCenter = (r, c) => ({ x: c * 50 + 25, y: r * 50 + 25 });
+
+    let html = `<defs>
+      <filter id="mf-gold-glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#facc15" flood-opacity="0.95"/>
+      </filter>
+      <filter id="mf-green-glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#22c55e" flood-opacity="0.95"/>
+      </filter>
+      <filter id="mf-cyan-glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#38bdf8" flood-opacity="0.95"/>
+      </filter>
+      <filter id="mf-amber-glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feDropShadow dx="0" dy="0" stdDeviation="3" flood-color="#f59e0b" flood-opacity="0.95"/>
+      </filter>
+      <marker id="mf-arrow-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#22c55e"/>
+      </marker>
+      <marker id="mf-arrow-cyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#38bdf8"/>
+      </marker>
+      <marker id="mf-arrow-gold" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#facc15"/>
+      </marker>
+      <marker id="mf-arrow-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ef4444"/>
+      </marker>
+    </defs>`;
+
+    formulas.forEach(f => {
+      // 1. TRƯỜNG HỢP GỢI Ý DẪN ĐƯỜNG (Guidance Mode: Ô chưa giải được)
+      if (f.isGuidance && f.suggestedCell && f.targetCell) {
+        const tr = f.targetCell.r;
+        const tc = f.targetCell.c;
+        const sr = f.suggestedCell.r;
+        const sc = f.suggestedCell.c;
+        const val = f.suggestedCell.value;
+
+        // Ô người dùng chọn: viền hổ phách nét liền
+        html += `<rect x="${tc * 50 + 2}" y="${tr * 50 + 2}" width="46" height="46" rx="6"
+          fill="rgba(245, 158, 11, 0.15)" stroke="#f59e0b" stroke-width="2.5"/>`;
+
+        // Ô gợi ý dễ nhất: viền xanh lá dạ quang nhấp nháy + số to dạng watermark
+        html += `<rect x="${sc * 50 + 2}" y="${sr * 50 + 2}" width="46" height="46" rx="6"
+          fill="rgba(34, 197, 94, 0.28)" stroke="#22c55e" stroke-width="2.8" filter="url(#mf-green-glow)">
+          <animate attributeName="stroke-width" values="2;4;2" dur="1.2s" repeatCount="indefinite"/>
+        </rect>`;
+        html += `<text x="${sc * 50 + 25}" y="${sr * 50 + 35}" text-anchor="middle"
+          fill="#4ade80" font-size="28" font-weight="900" filter="url(#mf-green-glow)" opacity="0.95">${val}</text>`;
+
+        // Mũi tên cong dẫn đường từ ô chọn sang ô gợi ý
+        const p1 = cellCenter(tr, tc);
+        const p2 = cellCenter(sr, sc);
+        const mx = (p1.x + p2.x) / 2 - (p2.y - p1.y) * 0.18;
+        const my = (p1.y + p2.y) / 2 + (p2.x - p1.x) * 0.18;
+        const pathD = `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`;
+        html += `<path d="${pathD}" stroke="#38bdf8" stroke-width="2.5" fill="none"
+          stroke-dasharray="6 4" opacity="0.9" marker-end="url(#mf-arrow-cyan)">
+          <animate attributeName="stroke-dashoffset" values="20;0" dur="0.8s" repeatCount="indefinite"/>
+        </path>`;
+        return;
+      }
+
+      // 2. TRƯỜNG HỢP NAKED SINGLE (Ô độc thân)
+      if (f.subtype === 'naked-single' && f.targetCell) {
+        const tr = f.targetCell.r;
+        const tc = f.targetCell.c;
+        const val = f.digit;
+
+        // Dải sáng chữ thập nhẹ nhàng trên Hàng & Cột & Khối
+        html += `<rect x="0" y="${tr * 50}" width="450" height="50" fill="rgba(6, 182, 212, 0.09)"/>`;
+        html += `<rect x="${tc * 50}" y="0" width="50" height="450" fill="rgba(6, 182, 212, 0.09)"/>`;
+        const br = Math.floor(tr / 3) * 150;
+        const bc = Math.floor(tc / 3) * 150;
+        html += `<rect x="${bc}" y="${br}" width="150" height="150" fill="rgba(6, 182, 212, 0.06)"
+          stroke="rgba(6, 182, 212, 0.35)" stroke-width="1.5" rx="6"/>`;
+
+        // Ô đích: viền xanh lá dạ quang + số cần điền
+        html += `<rect x="${tc * 50 + 2}" y="${tr * 50 + 2}" width="46" height="46" rx="6"
+          fill="rgba(34, 197, 94, 0.28)" stroke="#22c55e" stroke-width="3" filter="url(#mf-green-glow)">
+          <animate attributeName="stroke-width" values="2.2;4;2.2" dur="1s" repeatCount="indefinite"/>
+        </rect>`;
+        html += `<text x="${tc * 50 + 25}" y="${tr * 50 + 35}" text-anchor="middle"
+          fill="#4ade80" font-size="28" font-weight="900" filter="url(#mf-green-glow)" opacity="0.95">${val}</text>`;
+        return;
+      }
+
+      // 2b. TRƯỜNG HỢP BẺ KHÓA THẾ BÍ 50/50 (Bifurcation Breaker bằng Phản chứng)
+      if (f.subtype === 'bifurcation-breaker' && f.targetCell) {
+        const tr = f.targetCell.r;
+        const tc = f.targetCell.c;
+        const val = f.digit;
+        const falseVal = f.falseVal;
+
+        // Dải sáng chữ thập dịu nhẹ trên Hàng & Cột & Khối
+        html += `<rect x="0" y="${tr * 50}" width="450" height="50" fill="rgba(6, 182, 212, 0.08)"/>`;
+        html += `<rect x="${tc * 50}" y="0" width="50" height="450" fill="rgba(6, 182, 212, 0.08)"/>`;
+        const br = Math.floor(tr / 3) * 150;
+        const bc = Math.floor(tc / 3) * 150;
+        html += `<rect x="${bc}" y="${br}" width="150" height="150" fill="rgba(6, 182, 212, 0.05)"
+          stroke="rgba(6, 182, 212, 0.35)" stroke-width="1.5" rx="6"/>`;
+
+        // Các ô số chặn (7 số đã có xung quanh loại trừ các khả năng khác): viền hổ phách nét liền
+        (f.baseCells || []).forEach(b => {
+          if (b.r !== tr || b.c !== tc) {
+            html += `<rect x="${b.c * 50 + 3}" y="${b.r * 50 + 3}" width="44" height="44" rx="6"
+              fill="rgba(245, 158, 11, 0.12)" stroke="#f59e0b" stroke-width="1.6"/>`;
+          }
+        });
+
+        // Ô đích: viền xanh lá dạ quang + số cần điền
+        html += `<rect x="${tc * 50 + 2}" y="${tr * 50 + 2}" width="46" height="46" rx="6"
+          fill="rgba(34, 197, 94, 0.28)" stroke="#22c55e" stroke-width="3" filter="url(#mf-green-glow)">
+          <animate attributeName="stroke-width" values="2.2;4;2.2" dur="1s" repeatCount="indefinite"/>
+        </rect>`;
+        html += `<text x="${tc * 50 + 25}" y="${tr * 50 + 35}" text-anchor="middle"
+          fill="#4ade80" font-size="28" font-weight="900" filter="url(#mf-green-glow)" opacity="0.95">${val}</text>`;
+
+        // Huy hiệu nhánh sai bị gạch bỏ đỏ rực ở góc trên ô
+        if (falseVal != null) {
+          html += `<g transform="translate(${tc * 50 + 27}, ${tr * 50 + 3})">
+            <rect width="18" height="14" rx="3" fill="#ef4444" opacity="0.95"/>
+            <text x="9" y="11" text-anchor="middle" fill="#ffffff" font-size="10" font-weight="900">${falseVal}</text>
+            <line x1="2" y1="12" x2="16" y2="2" stroke="#fee2e2" stroke-width="2"/>
+          </g>`;
+        }
+
+        // Điểm mâu thuẫn bế tắc (0 ứng viên) trên bàn cờ
+        if (f.eliminatedCells && f.eliminatedCells.length > 0) {
+          const cr = f.eliminatedCells[0].r;
+          const cc = f.eliminatedCells[0].c;
+
+          // Hộp đỏ nhấp nháy tại ô bị bế tắc nét liền
+          html += `<rect x="${cc * 50 + 2}" y="${cr * 50 + 2}" width="46" height="46" rx="6"
+            fill="rgba(239, 68, 68, 0.28)" stroke="#ef4444" stroke-width="2.8">
+            <animate attributeName="stroke-width" values="2;4;2" dur="1s" repeatCount="indefinite"/>
+          </rect>`;
+          // Chữ cảnh báo bế tắc
+          html += `<text x="${cc * 50 + 25}" y="${cr * 50 + 28}" text-anchor="middle"
+            fill="#ef4444" font-size="11" font-weight="900">💥 0 SỐ</text>`;
+
+          // Mũi tên cong nét đứt màu đỏ chỉ từ ô giả định sai tới ô bế tắc
+          const p1 = cellCenter(tr, tc);
+          const p2 = cellCenter(cr, cc);
+          const mx = (p1.x + p2.x) / 2 - (p2.y - p1.y) * 0.22;
+          const my = (p1.y + p2.y) / 2 + (p2.x - p1.x) * 0.22;
+          const pathD = `M ${p1.x} ${p1.y} Q ${mx} ${my} ${p2.x} ${p2.y}`;
+          html += `<path d="${pathD}" stroke="#ef4444" stroke-width="2.2" fill="none"
+            stroke-dasharray="5 3" opacity="0.9" marker-end="url(#mf-arrow-red)">
+            <animate attributeName="stroke-dashoffset" values="16;0" dur="0.8s" repeatCount="indefinite"/>
+          </path>`;
+        }
+        return;
+      }
+
+      // 3. TRƯỜNG HỢP HIDDEN SINGLE (Tia gióng Khối / Hàng / Cột)
+      if (f.subtype === 'hidden-single' && f.targetCell) {
+        const tr = f.targetCell.r;
+        const tc = f.targetCell.c;
+        const val = f.digit;
+
+        // Khung khối 3x3 mục tiêu viền nét liền màu vàng
+        const br = Math.floor(tr / 3) * 150;
+        const bc = Math.floor(tc / 3) * 150;
+        html += `<rect x="${bc + 2}" y="${br + 2}" width="146" height="146" fill="rgba(250, 204, 21, 0.07)"
+          stroke="rgba(250, 204, 21, 0.55)" stroke-width="2" rx="8"/>`;
+
+        // Các số khóa ở hàng/cột lân cận: chiếu tia gióng thẳng qua khối (bắt đầu từ mép ô, không vẽ vòng tròn hay tâm đè lên số)
+        (f.baseCells || []).forEach(base => {
+          const pb = cellCenter(base.r, base.c);
+
+          // Tia gióng thẳng quét qua khối (bắt đầu từ mép ô ra ngoài)
+          let lineD = '';
+          if (base.r >= Math.floor(tr / 3) * 3 && base.r < Math.floor(tr / 3) * 3 + 3) {
+            // Cùng hàng với khối: bắn ngang từ mép ô
+            const startX = base.c < tc ? (base.c + 1) * 50 : base.c * 50;
+            const endX = base.c < tc ? bc + 150 : bc;
+            lineD = `M ${startX} ${pb.y} L ${endX} ${pb.y}`;
+          } else if (base.c >= Math.floor(tc / 3) * 3 && base.c < Math.floor(tc / 3) * 3 + 3) {
+            // Cùng cột với khối: bắn dọc từ mép ô
+            const startY = base.r < tr ? (base.r + 1) * 50 : base.r * 50;
+            const endY = base.r < tr ? br + 150 : br;
+            lineD = `M ${pb.x} ${startY} L ${pb.x} ${endY}`;
+          }
+          if (lineD) {
+            html += `<path d="${lineD}" stroke="#facc15" stroke-width="2.5" fill="none"
+              stroke-dasharray="6 4" opacity="0.85" marker-end="url(#mf-arrow-gold)">
+              <animate attributeName="stroke-dashoffset" values="20;0" dur="0.8s" repeatCount="indefinite"/>
+            </path>`;
+          }
+        });
+
+        // Ô đích: viền xanh lá dạ quang + số cần điền
+        html += `<rect x="${tc * 50 + 2}" y="${tr * 50 + 2}" width="46" height="46" rx="6"
+          fill="rgba(34, 197, 94, 0.28)" stroke="#22c55e" stroke-width="3" filter="url(#mf-green-glow)">
+          <animate attributeName="stroke-width" values="2.2;4;2.2" dur="1s" repeatCount="indefinite"/>
+        </rect>`;
+        html += `<text x="${tc * 50 + 25}" y="${tr * 50 + 35}" text-anchor="middle"
+          fill="#4ade80" font-size="28" font-weight="900" filter="url(#mf-green-glow)" opacity="0.95">${val}</text>`;
+        return;
+      }
+
+      // 4. TRƯỜNG HỢP NÂNG CAO (Pointing, Subsets, X-Wing, Kaitun Chains)
+      // Không vẽ vòng tròn hay tâm đè lên các số baseCells
+
+      // Chain nodes nếu có
+      if (f.chainNodes && f.chainNodes.length >= 2) {
+        for (let i = 0; i < f.chainNodes.length - 1; i++) {
+          const p1 = cellCenter(f.chainNodes[i].r, f.chainNodes[i].c);
+          const p2 = cellCenter(f.chainNodes[i+1].r, f.chainNodes[i+1].c);
+          html += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"
+            stroke="${i%2===0 ? '#facc15' : '#38bdf8'}" stroke-width="2.2" stroke-dasharray="5 3" opacity="0.85"/>`;
+        }
+      }
+
+      // Eliminated cells: viền đỏ thanh mảnh nét liền (chữ số bị loại đã được gạch đỏ chuẩn trong lưới)
+      (f.eliminatedCells || []).forEach(e => {
+        html += `<rect x="${e.c * 50 + 4}" y="${e.r * 50 + 4}" width="42" height="42" rx="5"
+          fill="rgba(239, 68, 68, 0.09)" stroke="#ef4444" stroke-width="1.8"/>`;
+      });
+
+      // Confirmed cells (nếu có)
+      (f.confirmedCells || []).forEach(c => {
+        html += `<rect x="${c.c * 50 + 2}" y="${c.r * 50 + 2}" width="46" height="46" rx="6"
+          fill="rgba(34, 197, 94, 0.25)" stroke="#22c55e" stroke-width="2.8" filter="url(#mf-green-glow)"/>`;
+        if (f.digit) {
+          html += `<text x="${c.c * 50 + 25}" y="${c.r * 50 + 35}" text-anchor="middle"
+            fill="#4ade80" font-size="28" font-weight="900" filter="url(#mf-green-glow)">${f.digit}</text>`;
+        }
+      });
+    });
+
+    svg.innerHTML = html;
+  }
+
+  _findHiddenSingleFromNotes(d) {
+    if (!this.manualCandidates) return null;
+    const sol = this.getSolution();
+    for (let r = 0; r < 9; r++) {
+      const cells = [];
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && this.manualCandidates[r]?.[c]?.includes(d)) cells.push({ r, c });
+      }
+      if (cells.length === 1 && (!sol || sol[cells[0].r][cells[0].c] === d)) return cells[0];
+    }
+    for (let c = 0; c < 9; c++) {
+      const cells = [];
+      for (let r = 0; r < 9; r++) {
+        if (this.currentBoard[r][c] === 0 && this.manualCandidates[r]?.[c]?.includes(d)) cells.push({ r, c });
+      }
+      if (cells.length === 1 && (!sol || sol[cells[0].r][cells[0].c] === d)) return cells[0];
+    }
+    for (let br = 0; br < 3; br++) {
+      for (let bc = 0; bc < 3; bc++) {
+        const cells = [];
+        for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++) {
+          const r = br*3+dr, c = bc*3+dc;
+          if (this.currentBoard[r][c] === 0 && this.manualCandidates[r]?.[c]?.includes(d)) cells.push({ r, c });
+        }
+        if (cells.length === 1 && (!sol || sol[cells[0].r][cells[0].c] === d)) return cells[0];
+      }
+    }
+    return null;
+  }
+
+  _getPeers(r, c) {
+    const peers = new Set();
+    for (let i = 0; i < 9; i++) {
+      if (i !== c) peers.add(`${r},${i}`);
+      if (i !== r) peers.add(`${i},${c}`);
+    }
+    const br = Math.floor(r/3)*3, bc = Math.floor(c/3)*3;
+    for (let dr = 0; dr < 3; dr++) for (let dc = 0; dc < 3; dc++) {
+      const nr = br+dr, nc = bc+dc;
+      if (nr !== r || nc !== c) peers.add(`${nr},${nc}`);
+    }
+    return [...peers].map(k => { const [pr, pc] = k.split(',').map(Number); return { r: pr, c: pc }; });
+  }
+
+
+
+
+  /**
+   * Áp dụng loại bỏ ứng viên chung cho mọi loại công thức (Pointing, Claiming, X-Wing, v.v.)
+   */
+  applyGenericElimination(formula) {
+    if (!formula || !formula.eliminatedCells || formula.eliminatedCells.length === 0) return;
+    const digit = formula.digit;
+
+    if (!this.manualCandidates || this.manualCandidates.length !== 9) {
+      this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    }
+
+    // Nếu chưa có notes → tự điền từ board
+    let hasAnyNotes = false;
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        if (this.manualCandidates[r][c].length > 0) { hasAnyNotes = true; break; }
+      }
+      if (hasAnyNotes) break;
+    }
+    if (!hasAnyNotes) {
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (this.currentBoard[r][c] === 0) {
+            this.manualCandidates[r][c] = SudokuSolver.getCandidates(this.currentBoard, r, c);
+          }
+        }
+      }
+    }
+
+    // Loại bỏ
+    let eliminated = 0;
+    formula.eliminatedCells.forEach(cell => {
+      const idx = this.manualCandidates[cell.r][cell.c].indexOf(digit);
+      if (idx !== -1) {
+        this.manualCandidates[cell.r][cell.c].splice(idx, 1);
+        eliminated++;
+        this.triggerCellFeedback(cell.r, cell.c, false);
+      }
+    });
+
+    if (eliminated > 0) {
+      this.playSound('correct');
+      // Kiểm tra Naked Single vừa mở ra
+      const unlockedCells = [];
+      for (let r = 0; r < 9; r++) {
+        for (let c = 0; c < 9; c++) {
+          if (this.currentBoard[r][c] === 0 && this.manualCandidates[r][c].length === 1) {
+            unlockedCells.push({ r, c, val: this.manualCandidates[r][c][0] });
+          }
+        }
+      }
+      if (unlockedCells.length > 0) {
+        const first = unlockedCells[0];
+        setTimeout(() => {
+          this.selectCell(first.r, first.c);
+          this.showToast(`🔥 Mở khóa ${unlockedCells.length} ô! Đầu tiên: (${first.r+1},${first.c+1}) = ${first.val}. Nhấn số để điền!`, 'valid');
+          this.playSound('complete');
+        }, 500);
+      }
+    }
+
+    this.activeRadarFormula = null;
+    this.renderBoard();
+    setTimeout(() => { this.updateTacticalRadar(); }, 350);
+  }
+
+  /**
+   * Tìm Hidden Single: số d chỉ có thể đặt vào đúng 1 ô trong hàng/cột/khối
+   */
+  _findHiddenSingle(d, candidates) {
+    // Hàng
+    for (let r = 0; r < 9; r++) {
+      const cells = [];
+      for (let c = 0; c < 9; c++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r] && candidates[r][c] && candidates[r][c].includes(d)) {
+          cells.push({ r, c });
+        }
+      }
+      if (cells.length === 1) return cells[0];
+    }
+    // Cột
+    for (let c = 0; c < 9; c++) {
+      const cells = [];
+      for (let r = 0; r < 9; r++) {
+        if (this.currentBoard[r][c] === 0 && candidates[r] && candidates[r][c] && candidates[r][c].includes(d)) {
+          cells.push({ r, c });
+        }
+      }
+      if (cells.length === 1) return cells[0];
+    }
+    // Khối
+    for (let br = 0; br < 3; br++) {
+      for (let bc = 0; bc < 3; bc++) {
+        const cells = [];
+        for (let dr = 0; dr < 3; dr++) {
+          for (let dc = 0; dc < 3; dc++) {
+            const r = br*3+dr, c = bc*3+dc;
+            if (this.currentBoard[r][c] === 0 && candidates[r] && candidates[r][c] && candidates[r][c].includes(d)) {
+              cells.push({ r, c });
+            }
+          }
+        }
+        if (cells.length === 1) return cells[0];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Điền số vào ô theo cách chuẩn của Kaitun (bỏ qua kiểm tra solution để hỗ trợ puzzle không có solution pre-computed)
+   */
+  _kaitunFillCell(r, c, val, toastMsg) {
+    if (this.currentBoard[r][c] !== 0) return;
+    this.selectedCell = { row: r, col: c };
+    this.currentBoard[r][c] = val;
+    if (!this.manualCandidates || this.manualCandidates.length !== 9) {
+      this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    }
+    this.manualCandidates[r][c] = [];
+    // Xóa ứng viên khỏi peers nếu bật autoRemoveNotes
+    if (this.autoRemoveNotes) {
+      for (let i = 0; i < 9; i++) {
+        // Hàng
+        if (this.currentBoard[r][i] === 0 && this.manualCandidates[r][i]) {
+          const ix = this.manualCandidates[r][i].indexOf(val);
+          if (ix !== -1) this.manualCandidates[r][i].splice(ix, 1);
+        }
+        // Cột
+        if (this.currentBoard[i][c] === 0 && this.manualCandidates[i][c]) {
+          const ix = this.manualCandidates[i][c].indexOf(val);
+          if (ix !== -1) this.manualCandidates[i][c].splice(ix, 1);
+        }
+      }
+      // Khối
+      const br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+      for (let dr = 0; dr < 3; dr++) {
+        for (let dc = 0; dc < 3; dc++) {
+          const nr = br+dr, nc = bc+dc;
+          if (this.currentBoard[nr][nc] === 0 && this.manualCandidates[nr][nc]) {
+            const ix = this.manualCandidates[nr][nc].indexOf(val);
+            if (ix !== -1) this.manualCandidates[nr][nc].splice(ix, 1);
+          }
+        }
+      }
+    }
+    this.triggerCellFeedback(r, c, true);
+    this.playSound('complete');
+    this.showToast(toastMsg, 'valid');
+    this.activeRadarFormula = null;
+    this.renderBoard();
+    if (this.isBoardComplete()) {
+      this.setStatus('🎉 Chúc mừng! Bạn đã hoàn thành câu đố!', 'solved');
+      this.playSound('complete');
+    }
+    setTimeout(() => { this.updateTacticalRadar(); }, 350);
+  }
+
+
+
+  /**
+   * Hiển thị bảng điều khiển Tactical Digit Radar bên bảng bên phải
+   */
+  updateTacticalRadar() {
+    if (!this.dom.digitRadarCard) return;
+
+    const digit = this.activeRadarDigit || 5;
+    if (this.dom.radarActiveDigitLabel) {
+      this.dom.radarActiveDigitLabel.textContent = `Số ${digit}`;
+    }
+
+    // Cập nhật trạng thái nút pill 1 - 9
+    if (this.dom.radarDigitSelector) {
+      const pills = this.dom.radarDigitSelector.querySelectorAll('.radar-digit-pill');
+      pills.forEach(p => {
+        const d = parseInt(p.dataset.digit, 10);
+        p.classList.toggle('active', d === digit);
+      });
+    }
+
+    // Quét danh sách công thức
+    const formulas = this.scanTacticalFormulasForDigit(digit);
+
+    // Cập nhật nhãn trạng thái badge
+    if (this.dom.radarStatusBadge) {
+      if (formulas.length > 0 && formulas[0].type !== 'completed') {
+        this.dom.radarStatusBadge.textContent = `${formulas.length} thế công thức`;
+        this.dom.radarStatusBadge.className = 'radar-status-badge has-formula';
+      } else if (formulas.length > 0 && formulas[0].type === 'completed') {
+        this.dom.radarStatusBadge.textContent = 'Hoàn thành 9/9';
+        this.dom.radarStatusBadge.className = 'radar-status-badge';
+      } else {
+        this.dom.radarStatusBadge.textContent = 'Chưa có đòn bẩy';
+        this.dom.radarStatusBadge.className = 'radar-status-badge';
+      }
+    }
+
+    // Vẽ danh sách công thức
+    if (!this.dom.digitRadarContent) return;
+
+    if (formulas.length === 0) {
+      this.dom.digitRadarContent.innerHTML = `
+        <div class="radar-empty-state">
+          <p style="margin-bottom: 6px; font-weight: 600; color: #facc15;">
+            Số ${digit} đang rải rác và chưa xuất hiện thế đòn bẩy trực tiếp.
+          </p>
+          <p style="font-size: 0.74rem;">
+            💡 <strong>Mẹo gỡ bí:</strong> Bấm thử các số khác (1–9) ở thanh trên để tìm số có công thức Khóa tia Pointing, Claiming hoặc X-Wing trước!
+          </p>
+        </div>`;
+      return;
+    }
+
+    let html = '<div class="radar-formula-list custom-scrollbar">';
+    formulas.forEach((f, idx) => {
+      const isInspecting = this.activeRadarFormula && this.activeRadarFormula.id === f.id;
+      const baseCoordsStr = f.baseCells.map(p => `(${p.r + 1}, ${p.c + 1})`).join(', ');
+      const elimCoordsStr = f.eliminatedCells.map(p => `(${p.r + 1}, ${p.c + 1})`).join(', ');
+      const confirmedCoordsStr = f.confirmedCells ? f.confirmedCells.map(p => `(${p.r + 1}, ${p.c + 1})`).join(', ') : '';
+
+      html += `
+        <div class="radar-formula-card ${isInspecting ? 'active-inspection' : ''}${f.subtype === 'forcing-chain-confirm' ? ' kaitun-confirm-card' : ''}" data-formula-id="${f.id}">
+          <div class="radar-formula-top">
+            <span class="radar-formula-name">${idx + 1}. ${f.name}</span>
+            <span class="preview-diff-badge diff-${f.subtype === 'forcing-chain-confirm' ? 'confirm' : f.subtype === 'forcing-chain' ? 'forcing' : f.type === 'single' ? 'easy' : (f.type === 'x-wing' ? 'expert' : 'hard')}" style="font-size: 0.65rem; padding: 1px 6px;">
+              ${f.badge}
+            </span>
+          </div>
+          
+          ${f.chainNodes && f.chainNodes.length > 1 ? `
+            <div class="radar-cells-row" style="font-size:0.7rem; color:#a78bfa;">
+              🔗 Chuỗi: ${f.chainNodes.map(p => `(${p.r+1},${p.c+1})`).join(' ➔ ')}
+            </div>` : ''}
+
+          ${f.baseCells.length > 0 ? `
+            <div class="radar-cells-row">
+              <span class="radar-base-label">🟡 Ô bệ phóng:</span> ${baseCoordsStr}
+            </div>` : ''}
+
+          ${f.eliminatedCells.length > 0 ? `
+            <div class="radar-cells-row">
+              <span class="radar-target-label">🔴 Ô triệt tiêu (gạch đỏ):</span> ${elimCoordsStr}
+            </div>` : ''}
+
+          ${confirmedCoordsStr ? `
+            <div class="radar-cells-row" style="color: #4ade80; font-weight:700;">
+              🟢 Ô chốt đáp án: ${confirmedCoordsStr}
+            </div>` : ''}
+
+          <div class="radar-formula-expl">
+            ${f.explanation}
+          </div>
+
+          ${(f.baseCells.length > 0 || f.eliminatedCells.length > 0 || (f.confirmedCells && f.confirmedCells.length > 0)) ? `
+            <div style="display: flex; gap: 6px; margin-top: 6px;">
+              <button class="radar-btn-inspect" data-idx="${idx}" style="flex: 1;">
+                ${isInspecting ? '✕ Tắt soi sáng' : '👁️ Soi tia trên bàn cờ'}
+              </button>
+              ${f.subtype === 'forcing-chain-confirm' ? `
+                <button class="btn-apply-kaitun-action" data-idx="${idx}" style="background: linear-gradient(135deg,#16a34a,#22c55e); color:#fff; font-weight:800;" title="Điền người dùng đáp án này">
+                  🔒 Điền ngay! = ${f.confirmedCells[0].val}
+                </button>` : ''}
+              ${f.eliminatedCells.length > 0 ? `
+                <button class="btn-apply-kaitun-action" data-idx="${idx}" title="Loại bỏ số ${f.digit} khỏi ${f.eliminatedCells.length} ô bị triệt tiêu">
+                  ⚡ Bẻ khóa (${f.eliminatedCells.length} ô)
+                </button>
+              ` : ''}
+            </div>` : ''}
+        </div>`;
+    });
+    html += '</div>';
+
+    this.dom.digitRadarContent.innerHTML = html;
+
+    // Gắn sự kiện click cho nút "Soi bệ phóng & triệt tiêu"
+    const inspectBtns = this.dom.digitRadarContent.querySelectorAll('.radar-btn-inspect');
+    inspectBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.currentTarget.dataset.idx, 10);
+        const f = formulas[idx];
+        if (!f) return;
+        if (this.activeRadarFormula && this.activeRadarFormula.id === f.id) {
+          this.activeRadarFormula = null;
+        } else {
+          this.activeRadarFormula = f;
+          this.playSound('step');
+        }
+        this.renderBoard();
+      });
+    });
+
+    // Gắn sự kiện click cho nút "⚡ Bẻ khóa"
+    const applyBtns = this.dom.digitRadarContent.querySelectorAll('.btn-apply-kaitun-action');
+    applyBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const idx = parseInt(e.currentTarget.dataset.idx, 10);
+        const f = formulas[idx];
+        if (!f) return;
+        this.applyKaitunElimination(f);
+      });
+    });
+  }
+
+  /**
+   * Xóa sạch các tia sóng laser trên bàn cờ
+   */
+  clearRadarLaserWave() {
+    if (this.dom.radarLaserOverlay) {
+      this.dom.radarLaserOverlay.innerHTML = '';
+    }
+  }
+
+  /**
+   * Vẽ hoạt họa làn sóng năng lượng laser quét từ ô KHÔNG BỊ CHẶN (Bệ phóng - Vàng)
+   * bắn thẳng/bẻ góc 90 độ tới các ô BỊ CHẶN (Triệt tiêu - Đỏ)
+   * Hoàn toàn không có chữ chú thích che khuất bàn cờ.
+   */
+  drawRadarLaserWave(formula) {
+    if (!this.dom.radarLaserOverlay || !formula) return;
+    const svg = this.dom.radarLaserOverlay;
+    svg.innerHTML = '';
+
+    const cellCenter = (r, c) => ({
+      x: c * 50 + 25,
+      y: r * 50 + 25
+    });
+
+    let defs = `
+      <defs>
+        <!-- Bộ lọc phát quang tăng tốc phần cứng GPU (Direct3D11 / Vulkan Quad Shader) -->
+        <filter id="radar-gold-glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="#facc15" flood-opacity="0.9" />
+        </filter>
+        <filter id="radar-cyan-glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="#38bdf8" flood-opacity="0.9" />
+        </filter>
+        <filter id="radar-red-glow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="2.5" flood-color="#ef4444" flood-opacity="0.95" />
+        </filter>
+        <!-- Mũi tên laser màu đỏ chỉ vào ô bị chặn -->
+        <marker id="radar-arrow-red" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#ef4444" filter="url(#radar-red-glow)" />
+        </marker>
+      </defs>
+    `;
+
+    let tracksHtml = '';
+    let waypointsHtml = '';
+    let travelersHtml = '';
+
+    // 1. Ô KHÔNG BỊ CHẶN (Base Cells - Vàng): Đã làm nổi bật viền bằng CSS .radar-base-cell, không vẽ vòng tròn đè lên số
+    // (Giữ số trên ô hiển thị rõ ràng, không bị vòng tròn hay tâm che khuất)
+
+    // 2. Ô BỊ CHẶN (Eliminated Cells - Đỏ): Vòng va chạm nổ tung & dấu gạch đỏ
+    if (formula.eliminatedCells && formula.eliminatedCells.length > 0) {
+      formula.eliminatedCells.forEach(p => {
+        const pt = cellCenter(p.r, p.c);
+        waypointsHtml += `
+          <circle class="radar-impact-burst" cx="${pt.x}" cy="${pt.y}" r="18" />
+          <line class="radar-impact-cross" x1="${pt.x - 8}" y1="${pt.y - 8}" x2="${pt.x + 8}" y2="${pt.y + 8}" />
+          <line class="radar-impact-cross" x1="${pt.x + 8}" y1="${pt.y - 8}" x2="${pt.x - 8}" y2="${pt.y + 8}" />
+        `;
+      });
+    }
+
+    // 3. TẠO CÁC TIA SÓNG BẮN TỪ Ô KHÔNG BỊ CHẶN ➔ Ô BỊ CHẶN
+    const hasBase = formula.baseCells && formula.baseCells.length > 0;
+    const hasElim = formula.eliminatedCells && formula.eliminatedCells.length > 0;
+
+    if (hasBase && hasElim) {
+      const b0 = formula.baseCells[0];
+      const isPointingRow = formula.type === 'pointing-row' || (formula.baseCells.every(p => p.r === b0.r) && formula.eliminatedCells.some(p => p.r === b0.r));
+      const isPointingCol = formula.type === 'pointing-col' || (formula.baseCells.every(p => p.c === b0.c) && formula.eliminatedCells.some(p => p.c === b0.c));
+      const isClaimingRow = formula.type === 'claiming-row';
+      const isClaimingCol = formula.type === 'claiming-col';
+      const isXWing = formula.type === 'x-wing' && formula.baseCells.length === 4;
+
+      if (isPointingRow) {
+        // --- POINTING ROW: BẮN TỪ Ô VÀNG TRONG KHỐI ➔ SANG CÁC Ô ĐỎ BỊ CHẶN NGOÀI HÀNG ---
+        const r = b0.r;
+        const bCols = formula.baseCells.map(p => p.c).sort((a, b) => a - b);
+        const bMinC = bCols[0];
+        const bMaxC = bCols[bCols.length - 1];
+
+        // Tia liên kết giữa các ô không bị chặn trong khối
+        if (bMinC !== bMaxC) {
+          const pB1 = cellCenter(r, bMinC);
+          const pB2 = cellCenter(r, bMaxC);
+          tracksHtml += `
+            <path class="radar-beam-track" d="M ${pB1.x} ${pB1.y} L ${pB2.x} ${pB2.y}" />
+            <path class="radar-beam-path" d="M ${pB1.x} ${pB1.y} L ${pB2.x} ${pB2.y}" />
+          `;
+        }
+
+        // Tách các ô bị chặn sang bên phải và bên trái của bệ phóng
+        const rightElims = formula.eliminatedCells.filter(p => p.r === r && p.c > bMaxC).map(p => p.c).sort((a, b) => a - b);
+        const leftElims = formula.eliminatedCells.filter(p => p.r === r && p.c < bMinC).map(p => p.c).sort((a, b) => b - a);
+
+        if (rightElims.length > 0) {
+          const maxTargetC = rightElims[rightElims.length - 1];
+          const pStart = cellCenter(r, bMinC);
+          const pTarget = cellCenter(r, maxTargetC);
+          const lineD = `M ${pStart.x} ${pStart.y} L ${pTarget.x} ${pTarget.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-track" d="${lineD}" />
+            <path class="radar-beam-path" d="${lineD}" marker-end="url(#radar-arrow-red)" />
+          `;
+
+          // Các điểm waypoint dọc đường bắn
+          for (let c = bMinC + 1; c <= maxTargetC; c++) {
+            const pt = cellCenter(r, c);
+            waypointsHtml += `
+              <circle class="radar-cell-waypoint" cx="${pt.x}" cy="${pt.y}" r="3.5" />
+              <circle class="radar-cell-waypoint-dot" cx="${pt.x}" cy="${pt.y}" r="1.5" />
+            `;
+          }
+
+          // Hạt photon bay từ ô vàng sang ô đỏ
+          travelersHtml += `
+            <g>
+              <animateMotion dur="1.8s" repeatCount="indefinite" path="${lineD}" rotate="auto" />
+              <circle r="6" fill="#ffffff" filter="url(#radar-gold-glow)" />
+              <circle r="13" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.85">
+                <animate attributeName="r" values="7;16;7" dur="0.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="-10" cy="0" r="3" fill="#facc15" opacity="0.7" />
+            </g>
+          `;
+        }
+
+        if (leftElims.length > 0) {
+          const minTargetC = leftElims[leftElims.length - 1];
+          const pStart = cellCenter(r, bMaxC);
+          const pTarget = cellCenter(r, minTargetC);
+          const lineD = `M ${pStart.x} ${pStart.y} L ${pTarget.x} ${pTarget.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-track" d="${lineD}" />
+            <path class="radar-beam-path" d="${lineD}" marker-end="url(#radar-arrow-red)" />
+          `;
+
+          for (let c = bMaxC - 1; c >= minTargetC; c--) {
+            const pt = cellCenter(r, c);
+            waypointsHtml += `
+              <circle class="radar-cell-waypoint" cx="${pt.x}" cy="${pt.y}" r="3.5" />
+              <circle class="radar-cell-waypoint-dot" cx="${pt.x}" cy="${pt.y}" r="1.5" />
+            `;
+          }
+
+          travelersHtml += `
+            <g>
+              <animateMotion dur="1.8s" repeatCount="indefinite" path="${lineD}" rotate="auto" />
+              <circle r="6" fill="#ffffff" filter="url(#radar-gold-glow)" />
+              <circle r="13" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.85">
+                <animate attributeName="r" values="7;16;7" dur="0.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="-10" cy="0" r="3" fill="#facc15" opacity="0.7" />
+            </g>
+          `;
+        }
+      } else if (isPointingCol) {
+        // --- POINTING COL: BẮN TỪ Ô VÀNG TRONG KHỐI ➔ SANG CÁC Ô ĐỎ BỊ CHẶN NGOÀI CỘT ---
+        const c = b0.c;
+        const bRows = formula.baseCells.map(p => p.r).sort((a, b) => a - b);
+        const bMinR = bRows[0];
+        const bMaxR = bRows[bRows.length - 1];
+
+        if (bMinR !== bMaxR) {
+          const pB1 = cellCenter(bMinR, c);
+          const pB2 = cellCenter(bMaxR, c);
+          tracksHtml += `
+            <path class="radar-beam-track" d="M ${pB1.x} ${pB1.y} L ${pB2.x} ${pB2.y}" />
+            <path class="radar-beam-path" d="M ${pB1.x} ${pB1.y} L ${pB2.x} ${pB2.y}" />
+          `;
+        }
+
+        const downElims = formula.eliminatedCells.filter(p => p.c === c && p.r > bMaxR).map(p => p.r).sort((a, b) => a - b);
+        const upElims = formula.eliminatedCells.filter(p => p.c === c && p.r < bMinR).map(p => p.r).sort((a, b) => b - a);
+
+        if (downElims.length > 0) {
+          const maxTargetR = downElims[downElims.length - 1];
+          const pStart = cellCenter(bMinR, c);
+          const pTarget = cellCenter(maxTargetR, c);
+          const lineD = `M ${pStart.x} ${pStart.y} L ${pTarget.x} ${pTarget.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-track" d="${lineD}" />
+            <path class="radar-beam-path" d="${lineD}" marker-end="url(#radar-arrow-red)" />
+          `;
+
+          for (let r = bMinR + 1; r <= maxTargetR; r++) {
+            const pt = cellCenter(r, c);
+            waypointsHtml += `
+              <circle class="radar-cell-waypoint" cx="${pt.x}" cy="${pt.y}" r="3.5" />
+              <circle class="radar-cell-waypoint-dot" cx="${pt.x}" cy="${pt.y}" r="1.5" />
+            `;
+          }
+
+          travelersHtml += `
+            <g>
+              <animateMotion dur="1.8s" repeatCount="indefinite" path="${lineD}" rotate="auto" />
+              <circle r="6" fill="#ffffff" filter="url(#radar-gold-glow)" />
+              <circle r="13" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.85">
+                <animate attributeName="r" values="7;16;7" dur="0.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="-10" cy="0" r="3" fill="#facc15" opacity="0.7" />
+            </g>
+          `;
+        }
+
+        if (upElims.length > 0) {
+          const minTargetR = upElims[upElims.length - 1];
+          const pStart = cellCenter(bMaxR, c);
+          const pTarget = cellCenter(minTargetR, c);
+          const lineD = `M ${pStart.x} ${pStart.y} L ${pTarget.x} ${pTarget.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-track" d="${lineD}" />
+            <path class="radar-beam-path" d="${lineD}" marker-end="url(#radar-arrow-red)" />
+          `;
+
+          for (let r = bMaxR - 1; r >= minTargetR; r--) {
+            const pt = cellCenter(r, c);
+            waypointsHtml += `
+              <circle class="radar-cell-waypoint" cx="${pt.x}" cy="${pt.y}" r="3.5" />
+              <circle class="radar-cell-waypoint-dot" cx="${pt.x}" cy="${pt.y}" r="1.5" />
+            `;
+          }
+
+          travelersHtml += `
+            <g>
+              <animateMotion dur="1.8s" repeatCount="indefinite" path="${lineD}" rotate="auto" />
+              <circle r="6" fill="#ffffff" filter="url(#radar-gold-glow)" />
+              <circle r="13" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.85">
+                <animate attributeName="r" values="7;16;7" dur="0.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="-10" cy="0" r="3" fill="#facc15" opacity="0.7" />
+            </g>
+          `;
+        }
+      } else if (isClaimingRow || (formula.baseCells.every(p => p.r === b0.r) && formula.eliminatedCells.some(p => p.r !== b0.r))) {
+        // --- CLAIMING ROW: TỪ HÀNG BẺ GÓC 90 ĐỘ BẮN VÀO CÁC Ô ĐỎ TRONG KHỐI ---
+        const r = b0.r;
+        const bCols = formula.baseCells.map(p => p.c).sort((a, b) => a - b);
+        const pBase = cellCenter(r, bCols[0]);
+
+        formula.eliminatedCells.forEach((e, idx) => {
+          const pElim = cellCenter(e.r, e.c);
+          // Đi ngang theo hàng r tới cột e.c rồi bẻ góc 90 độ thẳng vào ô e.r
+          const pathD = `M ${pBase.x} ${pBase.y} L ${pElim.x} ${pBase.y} L ${pElim.x} ${pElim.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-track" d="${pathD}" />
+            <path class="radar-beam-bend-path" d="${pathD}" marker-end="url(#radar-arrow-red)" />
+          `;
+
+          // Điểm nút bẻ góc 90 độ
+          waypointsHtml += `
+            <circle cx="${pElim.x}" cy="${pBase.y}" r="5" fill="#0f172a" stroke="#38bdf8" stroke-width="2" />
+          `;
+
+          travelersHtml += `
+            <g>
+              <animateMotion dur="2s" repeatCount="indefinite" path="${pathD}" rotate="auto" begin="${idx * 0.3}s" />
+              <circle r="6" fill="#ffffff" filter="url(#radar-cyan-glow)" />
+              <circle r="13" fill="none" stroke="#38bdf8" stroke-width="2.5" opacity="0.85">
+                <animate attributeName="r" values="7;15;7" dur="0.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="-10" cy="0" r="3" fill="#38bdf8" opacity="0.7" />
+            </g>
+          `;
+        });
+      } else if (isClaimingCol || (formula.baseCells.every(p => p.c === b0.c) && formula.eliminatedCells.some(p => p.c !== b0.c))) {
+        // --- CLAIMING COL: TỪ CỘT BẺ GÓC 90 ĐỘ BẮN VÀO CÁC Ô ĐỎ TRONG KHỐI ---
+        const c = b0.c;
+        const bRows = formula.baseCells.map(p => p.r).sort((a, b) => a - b);
+        const pBase = cellCenter(bRows[0], c);
+
+        formula.eliminatedCells.forEach((e, idx) => {
+          const pElim = cellCenter(e.r, e.c);
+          // Đi dọc theo cột c tới hàng e.r rồi bẻ góc 90 độ thẳng vào ô e.c
+          const pathD = `M ${pBase.x} ${pBase.y} L ${pBase.x} ${pElim.y} L ${pElim.x} ${pElim.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-track" d="${pathD}" />
+            <path class="radar-beam-bend-path" d="${pathD}" marker-end="url(#radar-arrow-red)" />
+          `;
+
+          waypointsHtml += `
+            <circle cx="${pBase.x}" cy="${pElim.y}" r="5" fill="#0f172a" stroke="#38bdf8" stroke-width="2" />
+          `;
+
+          travelersHtml += `
+            <g>
+              <animateMotion dur="2s" repeatCount="indefinite" path="${pathD}" rotate="auto" begin="${idx * 0.3}s" />
+              <circle r="6" fill="#ffffff" filter="url(#radar-cyan-glow)" />
+              <circle r="13" fill="none" stroke="#38bdf8" stroke-width="2.5" opacity="0.85">
+                <animate attributeName="r" values="7;15;7" dur="0.8s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="-10" cy="0" r="3" fill="#38bdf8" opacity="0.7" />
+            </g>
+          `;
+        });
+      } else if (isXWing) {
+        // --- X-WING: MẠCH KÍN 4 GÓC VÀ BẮN TIA THẲNG VÀO CÁC Ô BỊ CHẶN ---
+        const pts = formula.baseCells.map(p => cellCenter(p.r, p.c));
+        pts.sort((a, b) => (a.y !== b.y ? a.y - b.y : a.x - b.x));
+        const [pTL, pTR, pBL, pBR] = pts;
+
+        const circuitD = `M ${pTL.x} ${pTL.y} L ${pTR.x} ${pTR.y} L ${pBR.x} ${pBR.y} L ${pBL.x} ${pBL.y} Z`;
+
+        tracksHtml += `
+          <path class="radar-beam-track" d="${circuitD}" />
+          <path class="radar-beam-path" d="${circuitD}" />
+          <path class="radar-beam-bend-path" d="M ${pTL.x} ${pTL.y} L ${pBR.x} ${pBR.y}" stroke-dasharray="6 6" />
+          <path class="radar-beam-bend-path" d="M ${pTR.x} ${pTR.y} L ${pBL.x} ${pBL.y}" stroke-dasharray="6 6" />
+        `;
+
+        // Hạt bay tuần hoàn quanh 4 góc bệ phóng
+        travelersHtml += `
+          <g>
+            <animateMotion dur="3.2s" repeatCount="indefinite" path="${circuitD}" rotate="auto" />
+            <circle r="6" fill="#ffffff" filter="url(#radar-gold-glow)" />
+            <circle r="14" fill="none" stroke="#facc15" stroke-width="2.5" opacity="0.85">
+              <animate attributeName="r" values="7;16;7" dur="0.8s" repeatCount="indefinite" />
+            </circle>
+          </g>
+        `;
+
+        // Bắn tia từ các góc về các ô bị triệt tiêu
+        formula.eliminatedCells.forEach(e => {
+          const ePt = cellCenter(e.r, e.c);
+          // Tìm góc gần nhất cùng hàng hoặc cột
+          const nearestBase = formula.baseCells.find(b => b.c === e.c || b.r === e.r) || formula.baseCells[0];
+          const bPt = cellCenter(nearestBase.r, nearestBase.c);
+          const shootD = `M ${bPt.x} ${bPt.y} L ${ePt.x} ${ePt.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-path" d="${shootD}" marker-end="url(#radar-arrow-red)" />
+          `;
+          travelersHtml += `
+            <g>
+              <animateMotion dur="1.6s" repeatCount="indefinite" path="${shootD}" rotate="auto" />
+              <circle r="5" fill="#ffffff" filter="url(#radar-red-glow)" />
+            </g>
+          `;
+        });
+      } else if (formula.type === 'kaitun' && formula.chainNodes && formula.chainNodes.length >= 3) {
+        // --- ⚡ KAITUN: CHUỖI DÂY CHUYỀN DOMINO BẺ KHÓA ĐA MẮT XÍCH (AIC & XY-CHAIN) ---
+        const nodes = formula.chainNodes;
+        const isXYChain = formula.subtype === 'xy-chain';
+        let fullChainD = '';
+
+        for (let i = 0; i < nodes.length - 1; i++) {
+          const n1 = nodes[i];
+          const n2 = nodes[i + 1];
+          const pt1 = cellCenter(n1.r, n1.c);
+          const pt2 = cellCenter(n2.r, n2.c);
+          const isStrong = (i % 2 === 0);
+
+          let segmentD = '';
+          if (n1.r === n2.r || n1.c === n2.c) {
+            segmentD = `M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt2.y}`;
+          } else {
+            segmentD = `M ${pt1.x} ${pt1.y} L ${pt2.x} ${pt1.y} L ${pt2.x} ${pt2.y}`;
+          }
+
+          if (i === 0) {
+            fullChainD = segmentD;
+          } else {
+            if (n1.r === n2.r || n1.c === n2.c) {
+              fullChainD += ` L ${pt2.x} ${pt2.y}`;
+            } else {
+              fullChainD += ` L ${pt2.x} ${pt1.y} L ${pt2.x} ${pt2.y}`;
+            }
+          }
+
+          tracksHtml += `
+            <path class="radar-beam-track" d="${segmentD}" />
+            <path class="${isStrong ? 'radar-beam-path' : 'radar-beam-bend-path'}" d="${segmentD}" />
+          `;
+
+          waypointsHtml += `
+            <circle cx="${pt1.x}" cy="${pt1.y}" r="6" fill="${isStrong ? '#facc15' : '#38bdf8'}" filter="url(${isStrong ? '#radar-gold-glow' : '#radar-cyan-glow'})" />
+            <circle cx="${pt1.x}" cy="${pt1.y}" r="2" fill="#ffffff" />
+          `;
+        }
+
+        const lastNode = nodes[nodes.length - 1];
+        const pLast = cellCenter(lastNode.r, lastNode.c);
+        waypointsHtml += `
+          <circle cx="${pLast.x}" cy="${pLast.y}" r="6" fill="${isXYChain ? '#d946ef' : '#facc15'}" filter="url(${isXYChain ? '#radar-cyan-glow' : '#radar-gold-glow'})" />
+          <circle cx="${pLast.x}" cy="${pLast.y}" r="2" fill="#ffffff" />
+        `;
+
+        // Hạt photon Domino bay luân phiên dọc theo chuỗi mắt xích
+        travelersHtml += `
+          <g>
+            <animateMotion dur="${nodes.length * 0.6}s" repeatCount="indefinite" path="${fullChainD}" rotate="auto" />
+            <circle r="7" fill="#ffffff" filter="url(${isXYChain ? '#radar-cyan-glow' : '#radar-gold-glow'})" />
+            <circle r="14" fill="none" stroke="${isXYChain ? '#d946ef' : '#facc15'}" stroke-width="2.5" opacity="0.85">
+              <animate attributeName="r" values="7;16;7" dur="0.8s" repeatCount="indefinite" />
+            </circle>
+            <circle cx="-10" cy="0" r="3.5" fill="${isXYChain ? '#d946ef' : '#facc15'}" opacity="0.75" />
+          </g>
+        `;
+
+        // Bắn 2 tia gọng kìm từ 2 đầu mút chuỗi về các ô bị triệt tiêu
+        const firstNode = nodes[0];
+        const pFirst = cellCenter(firstNode.r, firstNode.c);
+
+        formula.eliminatedCells.forEach(e => {
+          const pElim = cellCenter(e.r, e.c);
+          const shootD1 = `M ${pFirst.x} ${pFirst.y} L ${pElim.x} ${pElim.y}`;
+          const shootD2 = `M ${pLast.x} ${pLast.y} L ${pElim.x} ${pElim.y}`;
+
+          tracksHtml += `
+            <path class="radar-beam-path" d="${shootD1}" marker-end="url(#radar-arrow-red)" />
+            <path class="radar-beam-path" d="${shootD2}" marker-end="url(#radar-arrow-red)" />
+          `;
+
+          travelersHtml += `
+            <g>
+              <animateMotion dur="1.5s" repeatCount="indefinite" path="${shootD1}" rotate="auto" />
+              <circle r="5" fill="#ffffff" filter="url(#radar-red-glow)" />
+            </g>
+            <g>
+              <animateMotion dur="1.5s" repeatCount="indefinite" path="${shootD2}" rotate="auto" begin="0.3s" />
+              <circle r="5" fill="#ffffff" filter="url(#radar-red-glow)" />
+            </g>
+          `;
+        });
+      } else {
+        // --- CÁC CÔNG THỨC KHÁC: BẮN TỪ Ô KHÔNG BỊ CHẶN ➔ Ô BỊ CHẶN ---
+        formula.baseCells.forEach((b, idx) => {
+          const bPt = cellCenter(b.r, b.c);
+          formula.eliminatedCells.forEach(e => {
+            const ePt = cellCenter(e.r, e.c);
+            const lineD = `M ${bPt.x} ${bPt.y} L ${ePt.x} ${ePt.y}`;
+            tracksHtml += `
+              <path class="radar-beam-track" d="${lineD}" />
+              <path class="radar-beam-path" d="${lineD}" marker-end="url(#radar-arrow-red)" />
+            `;
+            travelersHtml += `
+              <g>
+                <animateMotion dur="1.8s" repeatCount="indefinite" path="${lineD}" rotate="auto" begin="${idx * 0.2}s" />
+                <circle r="5" fill="#ffffff" filter="url(#radar-gold-glow)" />
+                <circle r="12" fill="none" stroke="#facc15" stroke-width="2">
+                  <animate attributeName="r" values="6;14;6" dur="0.8s" repeatCount="indefinite" />
+                </circle>
+              </g>
+            `;
+          });
+        });
+      }
+    }
+
+    svg.innerHTML = defs + tracksHtml + waypointsHtml + travelersHtml;
   }
 
   /**
@@ -3877,6 +7878,7 @@ class SudokuApp {
     if (this.isPreviewMode) {
       this.closePreview(false);
     }
+    this.clearKaitunInference();
     if (!this.selectedCell) return;
     const { row, col } = this.selectedCell;
 
@@ -3895,6 +7897,17 @@ class SudokuApp {
         return;
       }
       this.toggleManualCandidate(row, col, val);
+      return;
+    }
+
+    // 0.1b. CHẾ ĐỘ GHI CHÚ LOẠI TRỪ (Đánh dấu ô KHÔNG THỂ có số đó):
+    if (this.isBanPencilMode) {
+      if (val >= 1 && val <= 9 && this.isDigitCompleted(val)) {
+        this.playSound('conflict');
+        this.setStatus(`⚠️ Số ${val} đã hoàn thành đủ 9 ô trên bàn cờ!`, 'conflict');
+        return;
+      }
+      this.toggleManualBannedCandidate(row, col, val);
       return;
     }
 
@@ -4051,14 +8064,27 @@ class SudokuApp {
 
     const hasUserDigit = this.currentBoard[row][col] !== 0;
     const hasNotes = this.manualCandidates[row] && this.manualCandidates[row][col] && this.manualCandidates[row][col].length > 0;
+    const hasBanned = this.manualBannedCandidates && this.manualBannedCandidates[row] && this.manualBannedCandidates[row][col] && this.manualBannedCandidates[row][col].length > 0;
 
-    // Trong chế độ bút chì: nếu ô có số nháp thì ưu tiên xóa sạch số nháp ở ô này
-    if (this.isPencilMode && hasNotes) {
-      this.manualCandidates[row][col] = [];
+    // Trong chế độ bút chì hoặc chế độ loại trừ: nếu ô có số nháp/loại trừ thì ưu tiên xóa sạch
+    if ((this.isPencilMode || this.isBanPencilMode) && (hasNotes || hasBanned)) {
+      if (this.manualCandidates[row]) this.manualCandidates[row][col] = [];
+      if (this.manualBannedCandidates && this.manualBannedCandidates[row]) this.manualBannedCandidates[row][col] = [];
       this.renderBoard();
       this.updateInspector();
       this.playSound('step');
-      this.setStatus(`Đã xóa toàn bộ số nháp tại (Hàng ${row + 1}, Cột ${col + 1})`, '');
+      this.setStatus(`Đã xóa toàn bộ số nháp & ghi chú loại trừ tại (Hàng ${row + 1}, Cột ${col + 1})`, '');
+      return;
+    }
+
+    // Nếu ô không có số điền nhưng có ghi chú nháp hoặc ghi chú loại trừ, xóa sạch ghi chú
+    if (!hasUserDigit && (hasNotes || hasBanned)) {
+      if (this.manualCandidates[row]) this.manualCandidates[row][col] = [];
+      if (this.manualBannedCandidates && this.manualBannedCandidates[row]) this.manualBannedCandidates[row][col] = [];
+      this.renderBoard();
+      this.updateInspector();
+      this.playSound('step');
+      this.setStatus(`Đã xóa toàn bộ ghi chú tại (Hàng ${row + 1}, Cột ${col + 1})`, '');
       return;
     }
 
@@ -4115,7 +8141,9 @@ class SudokuApp {
     this.closeGameOverModal();
     this.selectedCell = null;
     this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    this.manualBannedCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
     this.isPencilMode = false;
+    this.isBanPencilMode = false;
     this.updatePencilUI();
     this.userMovesHistory = [];
 
@@ -4158,6 +8186,13 @@ class SudokuApp {
     if (e.key === 'p' || e.key === 'P' || e.key === 'n' || e.key === 'N') {
       e.preventDefault();
       this.togglePencilMode();
+      return;
+    }
+
+    // Phím tắt X hoặc E để bật/tắt nhanh chế độ Ghi chú Loại trừ (Ban Pencil Mode)
+    if (e.key === 'x' || e.key === 'X' || e.key === 'e' || e.key === 'E') {
+      e.preventDefault();
+      this.toggleBanPencilMode();
       return;
     }
 
@@ -4240,7 +8275,9 @@ class SudokuApp {
     this.closeGameOverModal();
     this.selectedCell = null;
     this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    this.manualBannedCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
     this.isPencilMode = false;
+    this.isBanPencilMode = false;
     this.showCandidates = false;
     this.updatePencilUI();
     this.initialBoard = Array.from({ length: 9 }, () => Array(9).fill(0));
@@ -4703,6 +8740,7 @@ class SudokuApp {
   togglePencilMode(forceState = null) {
     this.isPencilMode = forceState !== null ? forceState : !this.isPencilMode;
     if (this.isPencilMode) {
+      this.isBanPencilMode = false;
       this.showCandidates = true;
     }
     this.updatePencilUI();
@@ -4715,7 +8753,25 @@ class SudokuApp {
   }
 
   /**
-   * Cập nhật trạng thái hiển thị của các nút Bút chì
+   * Bật / Tắt chế độ ghi chú loại trừ thủ công (Đánh dấu ô KHÔNG THỂ có số đó)
+   */
+  toggleBanPencilMode(forceState = null) {
+    this.isBanPencilMode = forceState !== null ? forceState : !this.isBanPencilMode;
+    if (this.isBanPencilMode) {
+      this.isPencilMode = false;
+      this.showCandidates = true;
+    }
+    this.updatePencilUI();
+    this.playSound('step');
+    const msg = this.isBanPencilMode
+      ? '🚫 Chế độ Ghi chú Loại trừ: ĐÃ BẬT (Bấm 1-9 để đánh dấu ô KHÔNG THỂ có số đó)'
+      : '🚫 Chế độ Ghi chú Loại trừ: ĐÃ TẮT';
+    this.setStatus(msg, this.isBanPencilMode ? 'valid' : '');
+    this.renderBoard();
+  }
+
+  /**
+   * Cập nhật trạng thái hiển thị của các nút Bút chì & Ghi chú loại trừ
    */
   updatePencilUI() {
     if (this.dom.btnPencilToggle) {
@@ -4729,6 +8785,16 @@ class SudokuApp {
     }
     if (this.dom.numpadPencilText) {
       this.dom.numpadPencilText.textContent = `Ghi chú: ${this.isPencilMode ? 'BẬT' : 'TẮT'}`;
+    }
+    if (this.dom.btnNumpadBanPencil) {
+      this.dom.btnNumpadBanPencil.classList.toggle('btn-ban-pencil-active', this.isBanPencilMode);
+    }
+    if (this.dom.numpadBanPencilText) {
+      this.dom.numpadBanPencilText.textContent = `Loại trừ: ${this.isBanPencilMode ? 'BẬT' : 'TẮT'}`;
+    }
+    if (this.dom.btnMenuBanPencil) {
+      this.dom.btnMenuBanPencil.classList.toggle('active', this.isBanPencilMode);
+      this.dom.btnMenuBanPencil.textContent = `🚫 Ghi chú loại trừ số: ${this.isBanPencilMode ? 'BẬT' : 'TẮT'} (X)`;
     }
   }
 
@@ -4753,12 +8819,58 @@ class SudokuApp {
       cands.push(num);
       cands.sort((a, b) => a - b);
       added = true;
+      // Gỡ khỏi ghi chú loại trừ nếu có
+      if (this.manualBannedCandidates && this.manualBannedCandidates[row] && this.manualBannedCandidates[row][col]) {
+        const bIdx = this.manualBannedCandidates[row][col].indexOf(num);
+        if (bIdx !== -1) this.manualBannedCandidates[row][col].splice(bIdx, 1);
+      }
     }
     this.manualCandidates[row][col] = cands;
     this.showCandidates = true;
     this.pencilType = 'manual';
     this.playSound('step');
     this.setStatus(`✏️ ${added ? 'Đã thêm' : 'Đã bỏ'} số nháp ${num} ở ô (Hàng ${row + 1}, Cột ${col + 1})`, added ? 'valid' : '');
+    this.renderBoard();
+    this.updateInspector();
+  }
+
+  /**
+   * Thêm hoặc bớt ghi chú loại trừ thủ công tại ô (row, col): Ô này KHÔNG THỂ là số num
+   */
+  toggleManualBannedCandidate(row, col, num) {
+    if (this.initialBoard[row][col] !== 0 || this.currentBoard[row][col] !== 0) {
+      this.playSound('conflict');
+      this.setStatus('⚠️ Không thể ghi chú trên ô đã có số!', 'conflict');
+      return;
+    }
+    if (!this.manualBannedCandidates) {
+      this.manualBannedCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    }
+    if (!this.manualBannedCandidates[row]) {
+      this.manualBannedCandidates[row] = Array.from({ length: 9 }, () => []);
+    }
+    let banned = this.manualBannedCandidates[row][col] || [];
+    const idx = banned.indexOf(num);
+    let added = false;
+    if (idx !== -1) {
+      banned.splice(idx, 1);
+    } else {
+      banned.push(num);
+      banned.sort((a, b) => a - b);
+      added = true;
+      // Nếu đang có số nháp thuận tương ứng thì xóa số nháp thuận
+      if (this.manualCandidates && this.manualCandidates[row] && this.manualCandidates[row][col]) {
+        const cIdx = this.manualCandidates[row][col].indexOf(num);
+        if (cIdx !== -1) this.manualCandidates[row][col].splice(cIdx, 1);
+      }
+    }
+    this.manualBannedCandidates[row][col] = banned;
+    this.showCandidates = true;
+    this.playSound('step');
+    this.setStatus(
+      `🚫 ${added ? 'Đã ghi chú: Ô' : 'Đã hủy ghi chú loại trừ số ' + num + ' ở ô'} (Hàng ${row + 1}, Cột ${col + 1}) ${added ? 'KHÔNG THỂ có số ' + num : ''}`,
+      added ? 'valid' : ''
+    );
     this.renderBoard();
     this.updateInspector();
   }
@@ -4848,6 +8960,7 @@ class SudokuApp {
    */
   clearAllNotes() {
     this.manualCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+    this.manualBannedCandidates = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
     // Chuyển ngay chế độ sang Thủ công để không bị hệ thống tự động sinh lại ứng viên
     this.pencilType = 'manual';
     localStorage.setItem('sudoku_pencil_type', 'manual');
@@ -4972,6 +9085,30 @@ class SudokuApp {
     quickTimerBtns.forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.dataset.mins, 10) === this.normalCountdownMinutes);
     });
+
+    // 5b. Đồng bộ cài đặt Kaitun Suy Luận
+    if (this.dom.toggleKaitunMode) {
+      this.dom.toggleKaitunMode.checked = this.kaitunModeEnabled;
+    }
+    const kaitunTimerRadios = document.querySelectorAll('input[name="kaitun-timer-type"]');
+    let matchedKaitunTimer = false;
+    kaitunTimerRadios.forEach(radio => {
+      if (parseInt(radio.value, 10) === this.kaitunDuration) {
+        radio.checked = true;
+        matchedKaitunTimer = true;
+      } else {
+        radio.checked = false;
+      }
+    });
+    if (!matchedKaitunTimer) {
+      const customKaitunRadio = document.querySelector('input[name="kaitun-timer-type"][value="custom"]');
+      if (customKaitunRadio) {
+        customKaitunRadio.checked = true;
+        if (this.dom.inputCustomKaitunSeconds) {
+          this.dom.inputCustomKaitunSeconds.value = this.kaitunDuration;
+        }
+      }
+    }
 
     // 6. Chuyển sang Tab được yêu cầu
     this.switchSettingsTab(defaultTab);
@@ -5108,6 +9245,28 @@ class SudokuApp {
     }
     this.applyNormalTimerSettings();
 
+    // 6. Lưu Cài đặt Kaitun Suy Luận
+    if (this.dom.toggleKaitunMode) {
+      this.kaitunModeEnabled = this.dom.toggleKaitunMode.checked;
+      localStorage.setItem('sudoku_kaitun_mode', String(this.kaitunModeEnabled));
+    }
+    const checkedKaitunRadio = document.querySelector('input[name="kaitun-timer-type"]:checked');
+    if (checkedKaitunRadio) {
+      if (checkedKaitunRadio.value === 'custom') {
+        const val = parseInt(this.dom.inputCustomKaitunSeconds?.value, 10) || 5;
+        this.kaitunDuration = Math.max(1, Math.min(60, val));
+      } else {
+        this.kaitunDuration = parseInt(checkedKaitunRadio.value, 10);
+      }
+      localStorage.setItem('sudoku_kaitun_duration', String(this.kaitunDuration));
+    }
+    this.updateQuickKaitunUI();
+    if (!this.kaitunModeEnabled) {
+      this.clearKaitunInference();
+    } else if (this.selectedCell) {
+      this.triggerKaitunInference(this.selectedCell.row, this.selectedCell.col);
+    }
+
     this.updateCrosshatchBtnLabel();
     this.updatePencilUI();
     this.updateMistakeBadge();
@@ -5189,6 +9348,236 @@ class SudokuApp {
     this.renderBoard();
     this.playSound('step');
     this.setStatus(`✓ Đã lưu cài đặt: ${this.pencilType === 'manual' ? 'Chế độ Bút chì thủ công' : 'Chế độ Tự động tính ứng viên'}!`, 'valid');
+  }
+
+  /**
+   * Tính tập hợp các ô (r, c) bị loại trừ candidate num theo logic Sudoku:
+   * 1. Ô cùng hàng, cột, khối với số num đã được đặt cố định
+   * 2. Single in Unit: Nếu num trong 1 box/hàng/cột chỉ còn duy nhất 1 ô hợp lệ, ô đó được chốt (Mắt xích Vàng) -> loại trừ hàng, cột tương ứng
+   * 3. Pointing / Claiming: Nếu num trong 1 box chỉ nằm trên 1 hàng/cột, thì các ô ngoài box trên hàng/cột đó bị loại trừ
+   * 4. Box-Line Reduction (Claiming): Nếu num trên 1 hàng/cột chỉ nằm trong 1 box, thì các ô khác trong box bị loại trừ
+   * 5. Cánh bướm X-Wing: 2 hàng cùng chứa num ở 2 cột tương ứng -> triệt tiêu num trên 2 cột đó
+   */
+  getEliminatedCandidateCells(num, candidatesMap) {
+    if (!num) return new Set();
+    const elimSet = new Set();
+    this.candidateEliminationReasons = new Map();
+    this.candidateConfirmedCells = new Set();
+
+    // 1. Trực tiếp từ các ô đã điền num trên bàn cờ
+    for (let r = 0; r < 9; r++) {
+      for (let c = 0; c < 9; c++) {
+        const val = (this.showSolution && this.solution) ? this.solution[r][c] : this.currentBoard[r][c];
+        if (val === num) {
+          // Cùng Hàng
+          for (let j = 0; j < 9; j++) {
+            if (j !== c) {
+              const k = `${r},${j}`;
+              elimSet.add(k);
+              if (!this.candidateEliminationReasons.has(k)) {
+                this.candidateEliminationReasons.set(k, `Cùng Hàng ${r + 1} với ô (${r + 1}, ${c + 1}) = ${num}`);
+              }
+            }
+          }
+          // Cùng Cột
+          for (let i = 0; i < 9; i++) {
+            if (i !== r) {
+              const k = `${i},${c}`;
+              elimSet.add(k);
+              if (!this.candidateEliminationReasons.has(k)) {
+                this.candidateEliminationReasons.set(k, `Cùng Cột ${c + 1} với ô (${r + 1}, ${c + 1}) = ${num}`);
+              }
+            }
+          }
+          // Cùng Khối 3x3
+          const br = Math.floor(r / 3) * 3;
+          const bc = Math.floor(c / 3) * 3;
+          for (let i = br; i < br + 3; i++) {
+            for (let j = bc; j < bc + 3; j++) {
+              if (i !== r || j !== c) {
+                const k = `${i},${j}`;
+                elimSet.add(k);
+                if (!this.candidateEliminationReasons.has(k)) {
+                  this.candidateEliminationReasons.set(k, `Cùng Khối 3x3 với ô (${r + 1}, ${c + 1}) = ${num}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (!candidatesMap) return elimSet;
+
+    // Grid các ô còn khả năng chứa num
+    const isCandAvailable = (r, c) => {
+      return this.currentBoard[r][c] === 0 && candidatesMap[r] && candidatesMap[r][c] && candidatesMap[r][c].includes(num) && !elimSet.has(`${r},${c}`);
+    };
+
+    let changed = true;
+    let loops = 0;
+
+    while (changed && loops < 10) {
+      changed = false;
+      loops++;
+
+      // A. Duyệt theo từng Khối 3x3 (Hidden Single & Pointing)
+      for (let b = 0; b < 9; b++) {
+        const br = Math.floor(b / 3) * 3;
+        const bc = (b % 3) * 3;
+        const validInBox = [];
+
+        for (let r = br; r < br + 3; r++) {
+          for (let c = bc; c < bc + 3; c++) {
+            if (isCandAvailable(r, c)) validInBox.push({ r, c });
+          }
+        }
+
+        // Đơn lẻ ẩn trong Khối 3x3 (Hidden Single in Box)
+        if (validInBox.length === 1) {
+          const p = validInBox[0];
+          const key = `${p.r},${p.c}`;
+          if (!this.candidateConfirmedCells.has(key)) {
+            this.candidateConfirmedCells.add(key);
+            for (let c = 0; c < 9; c++) {
+              if (c !== p.c && isCandAvailable(p.r, c)) {
+                const k = `${p.r},${c}`;
+                elimSet.add(k);
+                this.candidateEliminationReasons.set(k, `Số ${num} duy nhất trong Khối ${b + 1} tại ô (${p.r + 1}, ${p.c + 1}) khóa toàn bộ Hàng ${p.r + 1}`);
+                changed = true;
+              }
+            }
+            for (let r = 0; r < 9; r++) {
+              if (r !== p.r && isCandAvailable(r, p.c)) {
+                const k = `${r},${p.c}`;
+                elimSet.add(k);
+                this.candidateEliminationReasons.set(k, `Số ${num} duy nhất trong Khối ${b + 1} tại ô (${p.r + 1}, ${p.c + 1}) khóa toàn bộ Cột ${p.c + 1}`);
+                changed = true;
+              }
+            }
+          }
+        }
+
+        // Khóa tia trong Khối (Pointing Lines)
+        if (validInBox.length > 1) {
+          const boxCandRows = new Set(validInBox.map(p => p.r));
+          if (boxCandRows.size === 1) {
+            const row = Array.from(boxCandRows)[0];
+            for (let c = 0; c < 9; c++) {
+              if ((c < bc || c >= bc + 3) && isCandAvailable(row, c)) {
+                const k = `${row},${c}`;
+                elimSet.add(k);
+                this.candidateEliminationReasons.set(k, `Khóa tia Pointing: Số ${num} trong Khối ${b + 1} chỉ nằm trên Hàng ${row + 1}`);
+                changed = true;
+              }
+            }
+          }
+          const boxCandCols = new Set(validInBox.map(p => p.c));
+          if (boxCandCols.size === 1) {
+            const col = Array.from(boxCandCols)[0];
+            for (let r = 0; r < 9; r++) {
+              if ((r < br || r >= br + 3) && isCandAvailable(r, col)) {
+                const k = `${r},${col}`;
+                elimSet.add(k);
+                this.candidateEliminationReasons.set(k, `Khóa tia Pointing: Số ${num} trong Khối ${b + 1} chỉ nằm trên Cột ${col + 1}`);
+                changed = true;
+              }
+            }
+          }
+        }
+      }
+
+      // B. Chặn ngược Khối (Claiming / Box-Line Reduction theo Hàng)
+      for (let r = 0; r < 9; r++) {
+        const validInRow = [];
+        for (let c = 0; c < 9; c++) {
+          if (isCandAvailable(r, c)) validInRow.push({ r, c });
+        }
+        if (validInRow.length > 1) {
+          const boxes = new Set(validInRow.map(p => Math.floor(p.c / 3)));
+          if (boxes.size === 1) {
+            const bIdx = Array.from(boxes)[0];
+            const br = Math.floor(r / 3) * 3;
+            const bc = bIdx * 3;
+            for (let i = br; i < br + 3; i++) {
+              if (i !== r) {
+                for (let j = bc; j < bc + 3; j++) {
+                  if (isCandAvailable(i, j)) {
+                    const k = `${i},${j}`;
+                    elimSet.add(k);
+                    this.candidateEliminationReasons.set(k, `Chặn ngược Claiming: Số ${num} trên Hàng ${r + 1} chỉ nằm trong Khối ${Math.floor(r / 3) * 3 + bIdx + 1}`);
+                    changed = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // C. Chặn ngược Khối (Claiming / Box-Line Reduction theo Cột)
+      for (let c = 0; c < 9; c++) {
+        const validInCol = [];
+        for (let r = 0; r < 9; r++) {
+          if (isCandAvailable(r, c)) validInCol.push({ r, c });
+        }
+        if (validInCol.length > 1) {
+          const boxes = new Set(validInCol.map(p => Math.floor(p.r / 3)));
+          if (boxes.size === 1) {
+            const bIdx = Array.from(boxes)[0];
+            const br = bIdx * 3;
+            const bc = Math.floor(c / 3) * 3;
+            for (let i = br; i < br + 3; i++) {
+              for (let j = bc; j < bc + 3; j++) {
+                if (j !== c && isCandAvailable(i, j)) {
+                  const k = `${i},${j}`;
+                  elimSet.add(k);
+                  this.candidateEliminationReasons.set(k, `Chặn ngược Claiming: Số ${num} trên Cột ${c + 1} chỉ nằm trong Khối`);
+                  changed = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // D. Cánh bướm X-Wing (Theo 2 Hàng -> Triệt tiêu 2 Cột)
+      const rowCandCols = [];
+      for (let r = 0; r < 9; r++) {
+        const cols = [];
+        for (let c = 0; c < 9; c++) {
+          if (isCandAvailable(r, c)) cols.push(c);
+        }
+        rowCandCols.push(cols);
+      }
+      for (let r1 = 0; r1 < 8; r1++) {
+        if (rowCandCols[r1].length === 2) {
+          const [c1, c2] = rowCandCols[r1];
+          for (let r2 = r1 + 1; r2 < 9; r2++) {
+            if (rowCandCols[r2].length === 2 && rowCandCols[r2][0] === c1 && rowCandCols[r2][1] === c2) {
+              for (let r = 0; r < 9; r++) {
+                if (r !== r1 && r !== r2) {
+                  if (isCandAvailable(r, c1)) {
+                    const k = `${r},${c1}`;
+                    elimSet.add(k);
+                    this.candidateEliminationReasons.set(k, `Cánh bướm X-Wing trên Hàng ${r1 + 1} & ${r2 + 1} triệt tiêu Cột ${c1 + 1}`);
+                    changed = true;
+                  }
+                  if (isCandAvailable(r, c2)) {
+                    const k = `${r},${c2}`;
+                    elimSet.add(k);
+                    this.candidateEliminationReasons.set(k, `Cánh bướm X-Wing trên Hàng ${r1 + 1} & ${r2 + 1} triệt tiêu Cột ${c2 + 1}`);
+                    changed = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return elimSet;
   }
 
   /**
